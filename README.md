@@ -14,11 +14,8 @@ ejecutar el pipeline. Por eso el repo puede ser público y clonarse sin credenci
 git clone https://github.com/<usuario>/radar-pipeline
 cd radar-pipeline
 mkdir -p data out cv
-# volcar desde la base de datos del artifact a data/:
-#   ofertas.json    <- colección `ofertas`      (lista)
-#   tailor.json     <- colección `tailor`       ({id: {...}})
-#   perfil.json     <- documento `perfil/base`
-#   cerradas.json   <- documento `pipeline/cerradas`
+# volcar la base de datos del artifact (read_db con out_dir) y montarla:
+python pipeline/preparar_datos.py <directorio_del_volcado> data
 cd pipeline
 python puntuar.py          # -> data/resultado.json
 python generar_docs.py     # -> cv/*.pdf y data/manifest.json   (playwright + pdfinfo)
@@ -35,6 +32,7 @@ Python 3.11+, `playwright` con Chromium y `pdfinfo` (poppler-utils).
 
 | Script | Entrada | Salida |
 |---|---|---|
+| `preparar_datos.py` | volcado de la BD | los cuatro JSON de `data/` |
 | `puntuar.py` | ofertas, perfil | `data/resultado.json` con la puntuación original y adaptada |
 | `generar_docs.py` | resultado, perfil, tailor | un CV en PDF por oferta y `data/manifest.json` |
 | `dashboard.py` | resultado, manifest, perfil, tailor | `out/dashboard.html`, la página completa |

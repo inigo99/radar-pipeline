@@ -16,10 +16,12 @@ cd radar-pipeline
 mkdir -p data out cv
 # volcar la base de datos del artifact (read_db con out_dir) y montarla:
 python pipeline/preparar_datos.py <directorio_del_volcado> data
-cd pipeline
-python puntuar.py          # -> data/resultado.json
-python generar_docs.py     # -> cv/*.pdf y data/manifest.json   (playwright + pdfinfo)
-python dashboard.py        # -> out/dashboard.html
+
+# el pipeline se ejecuta SIEMPRE desde la raíz del repo: los scripts leen y
+# escriben en data/, cv/ y out/ relativos al directorio de trabajo.
+python pipeline/puntuar.py       # -> data/resultado.json
+python pipeline/generar_docs.py  # -> cv/*.pdf y data/manifest.json  (playwright + pdfinfo)
+python pipeline/dashboard.py     # -> out/dashboard.html
 ```
 
 `RADAR_DATA` cambia el directorio de datos (por defecto `data`).

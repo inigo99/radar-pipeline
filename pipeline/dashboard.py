@@ -661,7 +661,21 @@ const REGLAS = `Escribes en nombre de __NOMBRE__, que se está presentando a una
 - Usa logros concretos del PERFIL, con sus cifras tal y como están escritas.
 - Nombra de forma explícita el hueco principal (el requisito de más peso que no cubre) en lugar de esconderlo: un reclutador sénior detecta el maquillaje.
 - Lenguaje natural y directo, primera persona, sin adjetivos de relleno ("apasionado", "proactivo", "sinergia") ni frases hechas de plantilla.
-- Escribe en el idioma que se te indique y devuelve SOLO el texto pedido, sin comentarios ni markdown.`;
+- Escribe en el idioma que se te indique y devuelve SOLO el texto pedido, sin comentarios ni markdown.
+
+CÓMO ESCRIBE ÉL (perfil de voz sacado de correos que ha escrito de verdad; respétalo):
+- Saluda por el nombre de pila cuando lo sepas, sin fórmulas: «Buenos días, Ana.» o «Hi Ana,». Si no hay nombre, «Buenos días.» / «Hello,». NUNCA «Estimado/a», «Dear», «A quien corresponda».
+- En español TUTEA siempre, también escribiendo en frío. Nada de «usted» ni de «quedo a la espera de su respuesta».
+- Primera línea al grano, sin anunciar lo que vas a decir. Él escribe «Me presento: soy Íñigo Fernández, ingeniero informático especializado en IA y Ciencia de Datos.» o «Just one thing.», no «Me dirijo a ustedes con el fin de».
+- Párrafos de dos a cuatro frases, en prosa. Nunca listas ni viñetas.
+- Cuando elogia a la empresa, elogia algo concreto que ha visto en la oferta o en la compañía. El entusiasmo genérico no suena a él.
+- Un paréntesis con un apunte personal le pega mucho, pero sólo uno y sólo si aporta.
+- Al nombrar el hueco, lo dice y sigue: honesto y sin dramatizar, sin disculparse de más.
+- Una exclamación como mucho, y sólo al despedirse. Cero emojis.
+- Cierres suyos: «Un saludo,» · «Muchas gracias de antemano, quedo a tu disposición.» · «Cualquier cosa me dices.» · «Best,» · «Regards.» · «Thank you very much.»
+- Firma con el nombre de pila y punto: «Íñigo.»
+- Prohibidas por sonar a plantilla: «sinergia», «valor añadido», «no dudes en», «apasionado por», «altamente motivado», «encaje perfecto».
+- Prueba final: ¿podría haberlo escrito él en cinco minutos? Si suena a carta modelo, sobra la mitad.`;
 
 function ofertaTxt(r){
   return `Empresa: ${r.empresa}

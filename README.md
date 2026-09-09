@@ -22,16 +22,14 @@ mkdir -p data out cv
 cd pipeline
 python puntuar.py          # -> data/resultado.json
 python generar_docs.py     # -> cv/*.pdf y data/manifest.json   (playwright + pdfinfo)
-python excel.py            # -> out/ofertas.xlsx
 python dashboard.py        # -> out/dashboard.html
 ```
 
 `RADAR_DATA` cambia el directorio de datos (por defecto `data`).
-`RADAR_XLSX` cambia la ruta del Excel (por defecto `out/ofertas.xlsx`).
 
 ## Requisitos
 
-Python 3.11+, `playwright` con Chromium, `pdfinfo` (poppler-utils) y `openpyxl`.
+Python 3.11+, `playwright` con Chromium y `pdfinfo` (poppler-utils).
 
 ## Qué hace cada script
 
@@ -39,7 +37,6 @@ Python 3.11+, `playwright` con Chromium, `pdfinfo` (poppler-utils) y `openpyxl`.
 |---|---|---|
 | `puntuar.py` | ofertas, perfil | `data/resultado.json` con la puntuación original y adaptada |
 | `generar_docs.py` | resultado, perfil, tailor | un CV en PDF por oferta y `data/manifest.json` |
-| `excel.py` | resultado, tailor, manifest | hoja de cálculo con todas las ofertas |
 | `dashboard.py` | resultado, manifest, perfil, tailor | `out/dashboard.html`, la página completa |
 
 `datos.py` es el único punto de carga; `ofertas.py`, `tailor.py`, `base_cv.py` y

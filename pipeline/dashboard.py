@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
-import os, sys, json, base64, html
+import os, sys, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tailor import T
 
 RES = json.load(open('data/resultado.json'))
-MAN = {m['id']: m for m in json.load(open('data/manifest.json'))}
 
 rows=[]
 for r in RES:
-    m=MAN[r['id']]
     rows.append(dict(
       id=r['id'], empresa=r['empresa'], puesto=r['puesto'], ubicacion=r['ubicacion'],
       modalidad=r['modalidad'], publicada=r['publicada'], idioma=r['idioma'], fuente=r['fuente'],
@@ -16,17 +14,16 @@ for r in RES:
       salBase=r['sal_base'], url=r['url'], scoreOrig=r['score_orig'], scoreAdap=r['score_adap'],
       delta=r['delta'], mejora=r['mejora_pct'], fuertes=r['fuertes'], huecos=r['huecos'],
       alerta=r.get('alerta',''), titular=T[r['id']]['titular'],
-      resumen=T[r['id']]['resumen'],
+      resumen=T[r['id']]['resumen'], familia=T[r['id']]['familia'],
       reqs=[f"{l} (peso {w})" for _,w,l in sorted(r['reqs'], key=lambda x:-x[1])[:12]],
       zona=('local' if ('Navarra' in r['modalidad'] or 'Gipuzkoa' in r['modalidad']) else 'remoto'),
-      cvName=os.path.basename(m['cv']),
-      cv=base64.b64encode(open(m['cv'],'rb').read()).decode(),
       ambito=r['ambito'],
     ))
 
 DATA = json.dumps(rows, ensure_ascii=False, separators=(',',':'))
 
-from base_cv import BULLETS_ES, BULLETS_EN, CONTACTO, PERFIL_LLM
+from base_cv import (BULLETS_ES, BULLETS_EN, SKILLS_ES, SKILLS_EN, CONTACTO,
+                      ORDEN, ORDEN_SKILLS, CV_LABELS, PERFIL_LLM)
 _pl = dict(PERFIL_LLM)
 _pl["tel"], _pl["email"], _pl["linkedin"] = CONTACTO["tel"], CONTACTO["email"], CONTACTO["linkedin"]
 _pl["experiencia"] = [
@@ -35,6 +32,12 @@ _pl["experiencia"] = [
      "logros_en": [BULLETS_EN[b] for b in e["bullets"]]}
     for e in PERFIL_LLM["experiencia"]]
 PERFIL = json.dumps(_pl, ensure_ascii=False, separators=(',', ':'))
+
+# Todo lo que necesita la página para armar el CV en el navegador, bajo demanda.
+CV = json.dumps(dict(contacto=CONTACTO, bullets_es=BULLETS_ES, bullets_en=BULLETS_EN,
+                     skills_es=SKILLS_ES, skills_en=SKILLS_EN, orden=ORDEN,
+                     orden_skills=ORDEN_SKILLS, labels=CV_LABELS),
+                ensure_ascii=False, separators=(',', ':'))
 
 TPL = r"""<title>Radar de ofertas</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -239,7 +242,7 @@ footer b{color:var(--ink-2);font-weight:600}
 <header>
   <p class="eyebrow">Actualizado el __FECHA__ · __N__ ofertas activas</p>
   <h1>Radar de ofertas</h1>
-  <p class="sub">Ofertas recientes que encajan con tu perfil: 100&nbsp;% remoto desde España o desde el extranjero, y presencial o híbrido en Navarra y Gipúzcoa. Rastreadas en LinkedIn, InfoJobs, Tecnoempleo, Indeed y los portales de empleo remoto. Cada fila trae su CV adaptado al idioma de la oferta; la cover letter y el correo a RRHH se escriben desde dentro de la oferta, con un botón, sólo para las que te interesen. Pulsa cualquier fila para abrirla, o «Configuración» para cambiar qué se busca: la tarea diaria lo lee antes de cada ejecución.</p>
+  <p class="sub">Ofertas recientes que encajan con tu perfil: 100&nbsp;% remoto desde España o desde el extranjero, y presencial o híbrido en Navarra y Gipúzcoa. Rastreadas en LinkedIn, InfoJobs, Tecnoempleo, Indeed y los portales de empleo remoto. El CV adaptado, la cover letter y el correo a RRHH se generan desde dentro de la oferta, con un botón, sólo para las que te interesen. Pulsa cualquier fila para abrirla, o «Configuración» para cambiar qué se busca: la tarea diaria lo lee antes de cada ejecución.</p>
 </header>
 
 <div class="stats" id="stats"></div>
@@ -291,6 +294,7 @@ footer b{color:var(--ink-2);font-weight:600}
 const DATA = __DATA__;
 const PERFIL = __PERFIL__;
 const CONTACTO = __CONTACTO__;
+const CV = __CV__;
 const COLS = [
  {k:'empresa', t:'Empresa'},
  {k:'puesto', t:'Puesto'},
@@ -611,8 +615,9 @@ function detailHTML(r){
         ${novDetalle(r)}
         <div class="actions">
           <a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Aplicar en ${esc(r.fuente)} →</a>
-          <button class="btn" data-dl="cv" data-id="${r.id}">Descargar CV adaptado</button>
+          <button class="btn" data-cv="${r.id}">Generar CV adaptado (PDF)</button>
         </div>
+        <p class="hint">El CV se arma en el momento con el titular, el resumen y el orden de logros calculados para esta oferta, en su idioma y en una sola página.</p>
       </div>
       <div>
         <div class="tabs">
@@ -808,6 +813,7 @@ function bind(){
     openId = openId===tr.dataset.id ? null : tr.dataset.id; render();
   });
   document.querySelectorAll('[data-dl]').forEach(b=>b.onclick=()=>download(b.dataset.id,b.dataset.dl));
+  document.querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>generarCV(b.dataset.cv));
   document.querySelectorAll('[data-dlpdf]').forEach(b=>b.onclick=()=>descargarPdf(b.dataset.id,b.dataset.dlpdf));
   document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{
     const d=(DOCS[b.dataset.id]||{})[b.dataset.copy];
@@ -861,19 +867,10 @@ let dl=null, dlTried=false;
 function slug(t){ return String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').slice(0,38); }
 async function download(id,kind){
   const r=DATA.find(x=>x.id===id);
-  let name, data;
-  if(kind==='cv'){
-    name=r.cvName;
-    const bin=atob(r.cv); const u=new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
-    data=u;
-  }else{
-    const d=(DOCS[id]||{})[kind];
-    if(!d||!d.texto){ toast('Genera el texto primero'); return; }
-    name = (kind==='carta'?'Carta_':'Correo_')+slug(r.empresa)+'__'+slug(r.puesto)+'.txt';
-    data = new TextEncoder().encode(d.texto);
-  }
-  await guardarArchivo(name, data);
+  const d=(DOCS[id]||{})[kind];
+  if(!d||!d.texto){ toast('Genera el texto primero'); return; }
+  await guardarArchivo((kind==='carta'?'Carta_':'Correo_')+slug(r.empresa)+'__'+slug(r.puesto)+'.txt',
+                       new TextEncoder().encode(d.texto));
 }
 
 async function guardarArchivo(name, data){
@@ -891,10 +888,16 @@ async function guardarArchivo(name, data){
 }
 
 
-/* ---------- Generación de PDF (sin dependencias: Helvetica base-14, WinAnsi) ---------- */
-const HW=[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
-const HBW=[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+/* ---------- Generación de PDF (sin dependencias: fuentes base-14, WinAnsi) ---------- */
+const FW={
+H:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,556,350,222,556,333,1000,556,556,333,1000,667,333,1000,350,611,350,350,222,222,333,333,350,556,1000,333,1000,500,333,944,350,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500],
+HB:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,350,556,350,278,556,500,1000,556,556,333,1000,667,333,1000,350,611,350,350,278,278,500,500,350,556,1000,333,1000,556,333,944,350,500,667,278,333,556,556,556,556,280,556,333,737,370,556,584,333,737,333,400,584,333,333,333,611,556,278,333,333,365,556,834,834,834,611,722,722,722,722,722,722,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,556,556,556,556,556,278,278,278,278,611,611,611,611,611,611,611,584,611,611,611,611,611,556,611,556],
+TR:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,250,333,408,500,500,833,778,180,333,333,500,564,250,333,250,278,500,500,500,500,500,500,500,500,500,500,278,278,564,564,564,444,921,722,667,667,722,611,556,722,722,333,389,722,611,889,722,722,556,722,667,556,611,722,722,944,722,722,611,333,278,333,469,500,333,444,500,444,500,444,333,500,500,278,278,500,278,778,500,500,500,500,333,389,278,500,500,722,500,500,444,480,200,480,541,350,500,350,333,500,444,1000,500,500,333,1000,556,333,889,350,611,350,350,333,333,444,444,350,500,1000,333,980,389,333,722,350,444,722,250,333,500,500,500,500,200,500,333,760,276,500,564,333,760,333,400,564,300,300,333,500,453,250,333,300,310,500,750,750,750,444,722,722,722,722,722,722,889,667,611,611,611,611,333,333,333,333,722,722,722,722,722,722,722,564,722,722,722,722,722,722,556,500,444,444,444,444,444,444,667,444,444,444,444,444,278,278,278,278,500,500,500,500,500,500,500,564,500,500,500,500,500,500,500,500],
+TB:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,250,333,555,500,500,1000,833,278,333,333,500,570,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,570,570,570,500,930,722,667,722,722,667,611,778,778,389,500,778,667,944,722,778,611,778,722,556,667,722,722,1000,722,722,667,333,278,333,581,500,333,500,556,444,556,444,333,500,556,278,333,556,278,833,556,500,556,556,444,389,333,556,500,722,500,500,444,394,220,394,520,350,500,350,333,500,500,1000,500,500,333,1000,556,333,1000,350,667,350,350,333,333,500,500,350,500,1000,333,1000,389,333,722,350,444,722,250,333,500,500,500,500,220,500,333,747,300,500,570,333,747,333,400,570,300,300,333,556,540,250,333,300,330,500,750,750,750,500,722,722,722,722,722,722,1000,722,667,667,667,667,389,389,389,389,722,722,778,778,778,778,778,570,778,722,722,722,722,722,611,556,500,500,500,500,500,500,722,444,444,444,444,444,278,278,278,278,500,556,500,500,500,500,500,570,500,556,556,556,556,500,556,500],
+TI:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,250,333,420,500,500,833,778,214,333,333,500,675,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,675,675,675,500,920,611,611,667,722,611,611,722,722,333,444,667,556,833,667,722,611,722,611,500,556,722,611,833,611,556,556,389,278,389,422,500,333,500,500,444,500,444,278,500,500,278,278,444,278,722,500,500,500,500,389,389,278,500,444,667,444,444,389,400,275,400,541,350,500,350,333,500,556,889,500,500,333,1000,500,333,944,350,556,350,350,333,333,556,556,350,500,889,333,980,389,333,667,350,389,556,250,389,500,500,500,500,275,500,333,760,276,500,675,333,760,333,400,675,300,300,333,500,523,250,333,300,310,500,750,750,750,500,611,611,611,611,611,611,889,667,611,611,611,611,333,333,333,333,722,667,722,722,722,722,722,675,722,722,722,722,722,556,611,500,500,500,500,500,500,500,667,444,444,444,444,444,278,278,278,278,500,500,500,500,500,500,500,675,500,500,500,500,500,444,500,444]};
 const CP1252={'€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,'•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159};
+const FONTID={H:'F1',HB:'F2',TR:'F3',TB:'F4',TI:'F5'};
+const FONTBASE=[['F1','Helvetica'],['F2','Helvetica-Bold'],['F3','Times-Roman'],['F4','Times-Bold'],['F5','Times-Italic']];
 
 function pdfByte(ch){
   const c=ch.codePointAt(0);
@@ -904,37 +907,35 @@ function pdfByte(ch){
   const b=ch.normalize('NFD').replace(/[^\x20-\x7e]/g,'');
   return b ? b.codePointAt(0) : 63;
 }
-function anchoCar(ch,bold){
-  const t=bold?HBW:HW, c=ch.codePointAt(0);
-  if(c>=32&&c<=126) return t[c-32];
-  if(ch==='—'||ch==='…') return 1000;
-  if(ch==='–'||ch==='€') return 556;
-  if(ch==='“'||ch==='”') return bold?500:333;
-  if(ch==='‘'||ch==='’') return bold?278:222;
-  const b=ch.normalize('NFD').replace(/[^\x20-\x7e]/g,'');
-  return b ? t[b.codePointAt(0)-32] : 556;
+function anchoCar(ch,f){ const t=FW[f]||FW.H, b=pdfByte(ch); return t[b]||t[63]; }
+function anchoTexto(s,size,f,tc){
+  let t=0, n=0;
+  for(const ch of s){ t+=anchoCar(ch,f); n++; }
+  return t*size/1000 + (tc||0)*Math.max(0,n-1);
 }
-function anchoTexto(s,size,bold){ let t=0; for(const ch of s) t+=anchoCar(ch,bold); return t*size/1000; }
 
-function cortarLineas(txt,size,bold,maxW){
+/* Parte el texto en líneas; `fin` marca la última línea de cada párrafo (no se justifica). */
+function envolver(txt,size,f,maxW,tc){
   const out=[];
   for(const para of String(txt).replace(/\r/g,'').split('\n')){
-    if(!para.trim()){ out.push(''); continue; }
+    if(!para.trim()){ out.push({s:'',fin:true}); continue; }
+    const linlas=[];
     let linea='';
     for(const pal of para.trim().split(/\s+/)){
       const cand = linea ? linea+' '+pal : pal;
-      if(anchoTexto(cand,size,bold)<=maxW){ linea=cand; continue; }
-      if(linea) out.push(linea);
+      if(anchoTexto(cand,size,f,tc)<=maxW){ linea=cand; continue; }
+      if(linea) linlas.push(linea);
       let p=pal;
-      while(anchoTexto(p,size,bold)>maxW && p.length>1){
-        let i=1; while(i<p.length && anchoTexto(p.slice(0,i+1),size,bold)<=maxW) i++;
-        out.push(p.slice(0,i)); p=p.slice(i);
+      while(anchoTexto(p,size,f,tc)>maxW && p.length>1){
+        let i=1; while(i<p.length && anchoTexto(p.slice(0,i+1),size,f,tc)<=maxW) i++;
+        linlas.push(p.slice(0,i)); p=p.slice(i);
       }
       linea=p;
     }
-    out.push(linea);
+    linlas.push(linea);
+    linlas.forEach((s,i)=>out.push({s, fin:i===linlas.length-1}));
   }
-  while(out.length && out[out.length-1]==='') out.pop();
+  while(out.length && out[out.length-1].s==='') out.pop();
   return out;
 }
 
@@ -943,6 +944,54 @@ function bytesTexto(arr,s){
   for(const ch of s){ const b=pdfByte(ch); if(b===40||b===41||b===92) arr.push(92); arr.push(b); }
 }
 const n2 = v => (Math.round(v*100)/100).toString();
+
+/* Escribe el PDF. `paginas` es una lista de listas de elementos:
+   {s,size,f,x,y,rgb,tw,tc} para texto y {linea:{x1,x2,y,rgb,ancho}} para una regla. */
+function construirPdf(paginas,W,H){
+  const N=paginas.length, idFont=3+2*N;
+  const bytes=[], off=[];
+  const obj=(id,cuerpo)=>{ off[id]=bytes.length; bytesAscii(bytes,id+' 0 obj\n'+cuerpo+'\nendobj\n'); };
+  const recursos='<</Font<<'+FONTBASE.map((f,i)=>'/'+f[0]+' '+(idFont+i)+' 0 R').join('')+'>>>>';
+
+  bytesAscii(bytes,'%PDF-1.4\n');
+  obj(1,'<</Type/Catalog/Pages 2 0 R>>');
+  obj(2,'<</Type/Pages/Count '+N+'/Kids['+paginas.map((_,i)=>(3+2*i)+' 0 R').join(' ')+']>>');
+
+  paginas.forEach((items,i)=>{
+    const idPag=3+2*i, idCont=idPag+1;
+    obj(idPag,'<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+n2(W)+' '+n2(H)+']'
+      +'/Resources'+recursos+'/Contents '+idCont+' 0 R>>');
+    const cs=[];
+    for(const it of items){
+      if(it.linea){
+        const g=it.linea.rgb||[0.80,0.84,0.83];
+        bytesAscii(cs,g.map(n2).join(' ')+' RG '+n2(it.linea.ancho||0.8)+' w '
+          +n2(it.linea.x1)+' '+n2(it.linea.y)+' m '+n2(it.linea.x2)+' '+n2(it.linea.y)+' l S\n');
+        continue;
+      }
+      const rgb=it.rgb||[0.07,0.09,0.10];
+      bytesAscii(cs,'BT /'+(FONTID[it.f]||'F1')+' '+n2(it.size)+' Tf '
+        +rgb.map(n2).join(' ')+' rg '
+        +n2(it.tw||0)+' Tw '+n2(it.tc||0)+' Tc '
+        +'1 0 0 1 '+n2(it.x)+' '+n2(it.y)+' Tm (');
+      bytesTexto(cs,it.s);
+      bytesAscii(cs,') Tj ET\n');
+    }
+    off[idCont]=bytes.length;
+    bytesAscii(bytes,idCont+' 0 obj\n<</Length '+cs.length+'>>\nstream\n');
+    for(const b of cs) bytes.push(b);
+    bytesAscii(bytes,'\nendstream\nendobj\n');
+  });
+
+  FONTBASE.forEach((f,i)=>obj(idFont+i,
+    '<</Type/Font/Subtype/Type1/BaseFont/'+f[1]+'/Encoding/WinAnsiEncoding>>'));
+
+  const total=idFont+FONTBASE.length-1, inicioXref=bytes.length;
+  bytesAscii(bytes,'xref\n0 '+(total+1)+'\n0000000000 65535 f \n');
+  for(let i=1;i<=total;i++) bytesAscii(bytes,String(off[i]).padStart(10,'0')+' 00000 n \n');
+  bytesAscii(bytes,'trailer\n<</Size '+(total+1)+'/Root 1 0 R>>\nstartxref\n'+inicioXref+'\n%%EOF\n');
+  return new Uint8Array(bytes);
+}
 
 const ETIQ = {
   carta:{es:'Carta de presentación', en:'Cover letter'},
@@ -957,65 +1006,142 @@ function pdfDoc(r, kind, texto){
   const paginas=[]; let pag=[]; let y=H-M;
   function nuevaPagina(){ paginas.push(pag); pag=[]; y=H-M; }
   function avanzar(dy){ y-=dy; if(y<M){ nuevaPagina(); y-=dy; } }
-  function poner(s,size,bold,gris){ pag.push({s,size,bold,gris,y}); }
+  function poner(s,size,f,gris){ pag.push({s,size,f,x:M,y,rgb:gris?[0.44,0.50,0.49]:[0.07,0.09,0.10]}); }
 
   avanzar(15);
-  poner(CONTACTO.nombre, 14.5, true, false);
+  poner(CONTACTO.nombre, 14.5, 'HB', false);
   avanzar(13.5);
-  poner([CONTACTO.ciudad,CONTACTO.email,CONTACTO.tel,CONTACTO.linkedin].join('  ·  '), 8.6, false, true);
+  poner([CONTACTO.ciudad,CONTACTO.email,CONTACTO.tel,CONTACTO.linkedin].join('  ·  '), 8.6, 'H', true);
   avanzar(11);
-  pag.push({regla:true, y});
+  pag.push({linea:{x1:M, x2:W-M, y, rgb:[0.80,0.84,0.83], ancho:0.8}});
   avanzar(21);
-  poner(r.empresa+'  ·  '+r.puesto, 10.8, true, false);
+  poner(r.empresa+'  ·  '+r.puesto, 10.8, 'HB', false);
   avanzar(12.5);
-  poner(ETIQ[kind][idi]+'  ·  '+fecha, 8.8, false, true);
+  poner(ETIQ[kind][idi]+'  ·  '+fecha, 8.8, 'H', true);
   avanzar(23);
 
-  for(const l of cortarLineas(texto,S,false,maxW)){
-    if(l===''){ avanzar(LEAD*0.6); continue; }
-    avanzar(LEAD); poner(l,S,false,false);
+  for(const l of envolver(texto,S,'H',maxW,0)){
+    if(l.s===''){ avanzar(LEAD*0.6); continue; }
+    avanzar(LEAD); poner(l.s,S,'H',false);
   }
   paginas.push(pag);
+  return construirPdf(paginas,W,H);
+}
 
-  const N=paginas.length;
-  const idF1=3+2*N, idF2=idF1+1;
-  const bytes=[]; const off=[];
-  const obj=(id,cuerpo)=>{ off[id]=bytes.length; bytesAscii(bytes,id+' 0 obj\n'+cuerpo+'\nendobj\n'); };
+/* ---------- CV adaptado, generado en el momento ----------
+   Reproduce el CV que antes construía `generar_docs.py` con Chromium: mismo
+   contenido, mismo orden y una sola página, bajando el cuerpo de letra hasta
+   que cabe. Todo lo que se imprime sale de CV (el perfil real) y de la fila. */
+const PX = 0.75;                      // 1 px CSS = 0.75 pt
+const CV_ANCHO = 595.28, CV_ALTO = 841.89;
+const CV_PADX = 34.02, CV_PADY = 25.51;   // 12 mm / 9 mm
+const CV_LH = 1.26;
 
-  bytesAscii(bytes,'%PDF-1.4\n');
-  obj(1,'<</Type/Catalog/Pages 2 0 R>>');
-  obj(2,'<</Type/Pages/Count '+N+'/Kids['+paginas.map((_,i)=>(3+2*i)+' 0 R').join(' ')+']>>');
+function cvBloques(r, FS){
+  const idi = r.idioma==='en' ? 'en' : 'es';
+  const L  = CV.labels[idi];
+  const B  = idi==='en' ? CV.bullets_en : CV.bullets_es;
+  const SK = idi==='en' ? CV.skills_en  : CV.skills_es;
+  const fam = CV.orden[r.familia] ? r.familia : 'backend';
+  const oo = CV.orden[fam][0], vv = CV.orden[fam][1];
+  const nombre = idi==='en' ? CV.contacto.nombre_en : CV.contacto.nombre_es;
+  const ciudad = idi==='en' ? CV.contacto.ciudad_en : CV.contacto.ciudad_es;
+  const bl=[];
+  const h2 = t => bl.push({s:t, size:9.2, f:'TB', mt:7*PX, mb:3*PX, tc:0.08*9.2,
+                           regla:{pt:1.5*PX, rgb:[0.60,0.60,0.60], ancho:0.6}});
+  const jt = (t,size) => bl.push({s:t, size:size||9.7, f:'TB', mt:4*PX});
+  const jl = t => bl.push({s:t, size:8.8, f:'TI', mb:3*PX, rgb:[0.33,0.33,0.33]});
 
-  paginas.forEach((items,i)=>{
-    const idPag=3+2*i, idCont=idPag+1;
-    obj(idPag,'<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+n2(W)+' '+n2(H)+']'
-      +'/Resources<</Font<</F1 '+idF1+' 0 R/F2 '+idF2+' 0 R>>>>/Contents '+idCont+' 0 R>>');
-    const cs=[];
-    for(const it of items){
-      if(it.regla){
-        bytesAscii(cs,'0.80 0.84 0.83 RG 0.8 w '+n2(M)+' '+n2(it.y)+' m '+n2(W-M)+' '+n2(it.y)+' l S\n');
-        continue;
+  bl.push({s:nombre, size:15.5, f:'TB', mb:1*PX});
+  bl.push({s:r.titular, size:10.4, f:'TR', mb:3*PX});
+  bl.push({s:[ciudad,CV.contacto.tel,CV.contacto.email,CV.contacto.linkedin].join(' · '),
+           size:8.5, f:'TR', mb:6*PX, regla:{pt:5*PX, rgb:[0.73,0.73,0.73], ancho:0.75}});
+
+  h2(L.resumen);
+  bl.push({s:r.resumen, size:FS, f:'TR', mb:3.5*PX, just:true});
+
+  h2(L.exp);
+  jt(L.o_tit); jl(L.o_loc);
+  bl.push({items:oo.map(k=>B[k]), size:FS, f:'TR', mb:3*PX, just:true});
+  jt(L.v_tit); jl(L.v_loc);
+  bl.push({items:vv.map(k=>B[k]), size:FS, f:'TR', mb:3*PX, just:true});
+
+  h2(L.form);
+  jt(L.m_tit); jl(L.m_sub);
+  bl.push({s:L.m_tfm, size:8.8, f:'TR', mb:3.5*PX, just:true});
+  jt(L.g_tit); jl(L.g_sub);
+  bl.push({s:L.g_tfg, size:8.8, f:'TR', mb:3.5*PX, just:true});
+  jt(L.compl, 9.4);
+  bl.push({items:L.compl_items, size:8.8, f:'TR', mt:0, mb:3*PX});
+
+  h2(L.skills);
+  for(const s of CV.orden_skills[fam]) bl.push({s:SK[s], size:FS, f:'TR', mb:2*PX});
+
+  h2(L.lid);
+  bl.push({s:L.lid_txt, size:FS, f:'TR', mb:3.5*PX, just:true});
+  h2(L.idi);
+  bl.push({s:L.idi_txt, size:FS, f:'TR', mb:3.5*PX, just:true});
+  return bl;
+}
+
+function cvLinea(l, b, x, y, maxW){
+  const it={s:l.s, size:b.size, f:b.f, x, y, rgb:b.rgb, tc:b.tc||0};
+  if(b.just && !l.fin){
+    const n=(l.s.match(/ /g)||[]).length;
+    const hueco=maxW-anchoTexto(l.s,b.size,b.f,b.tc||0);
+    if(n>0 && hueco>0 && hueco < maxW*0.25) it.tw=hueco/n;
+  }
+  return it;
+}
+
+function cvDisponer(bl, medir){
+  const maxW = CV_ANCHO-2*CV_PADX, sangria = 13*PX;
+  let y = CV_ALTO-CV_PADY, prevMB = 0;
+  const items=[];
+  for(const b of bl){
+    y -= Math.max(prevMB, b.mt||0);          // los márgenes contiguos se solapan, como en CSS
+    if(b.items){
+      for(const t of b.items){
+        const ls=envolver(t,b.size,b.f,maxW-sangria,0);
+        ls.forEach((l,i)=>{
+          y -= b.size*CV_LH;
+          if(medir) return;
+          if(i===0) items.push({s:'•', size:b.size, f:b.f, x:CV_PADX+2.5, y});
+          items.push(cvLinea(l,b,CV_PADX+sangria,y,maxW-sangria));
+        });
       }
-      bytesAscii(cs,'BT /'+(it.bold?'F2':'F1')+' '+n2(it.size)+' Tf '
-        +(it.gris?'0.44 0.50 0.49 rg ':'0.07 0.09 0.10 rg ')
-        +'1 0 0 1 '+n2(M)+' '+n2(it.y)+' Tm (');
-      bytesTexto(cs,it.s);
-      bytesAscii(cs,') Tj ET\n');
+    }else{
+      for(const l of envolver(b.s,b.size,b.f,maxW,b.tc||0)){
+        y -= b.size*CV_LH;
+        if(!medir) items.push(cvLinea(l,b,CV_PADX,y,maxW));
+      }
+      if(b.regla){
+        y -= b.regla.pt;
+        if(!medir) items.push({linea:{x1:CV_PADX, x2:CV_ANCHO-CV_PADX, y, rgb:b.regla.rgb, ancho:b.regla.ancho}});
+      }
     }
-    off[idCont]=bytes.length;
-    bytesAscii(bytes,idCont+' 0 obj\n<</Length '+cs.length+'>>\nstream\n');
-    for(const b of cs) bytes.push(b);
-    bytesAscii(bytes,'\nendstream\nendobj\n');
-  });
+    prevMB = b.mb||0;
+  }
+  return {alto:(CV_ALTO-CV_PADY)-y, items};
+}
 
-  obj(idF1,'<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>');
-  obj(idF2,'<</Type/Font/Subtype/Type1/BaseFont/Helvetica-Bold/Encoding/WinAnsiEncoding>>');
+function pdfCV(r){
+  const util = CV_ALTO-2*CV_PADY;
+  let FS = 8.1;
+  for(const fs of [9.6,9.3,9.0,8.7,8.4,8.1]){
+    if(cvDisponer(cvBloques(r,fs),true).alto <= util){ FS=fs; break; }
+  }
+  return construirPdf([cvDisponer(cvBloques(r,FS),false).items], CV_ANCHO, CV_ALTO);
+}
 
-  const total=idF2, inicioXref=bytes.length;
-  bytesAscii(bytes,'xref\n0 '+(total+1)+'\n0000000000 65535 f \n');
-  for(let i=1;i<=total;i++) bytesAscii(bytes,String(off[i]).padStart(10,'0')+' 00000 n \n');
-  bytesAscii(bytes,'trailer\n<</Size '+(total+1)+'/Root 1 0 R>>\nstartxref\n'+inicioXref+'\n%%EOF\n');
-  return new Uint8Array(bytes);
+function nombreCV(r){ return 'CV_'+slug(r.empresa)+'__'+slug(r.puesto)+'.pdf'; }
+
+async function generarCV(id){
+  const r=DATA.find(x=>x.id===id); if(!r) return;
+  let bytes;
+  try{ bytes=pdfCV(r); }
+  catch(e){ toast('No se ha podido construir el CV'); return; }
+  await guardarArchivo(nombreCV(r), bytes);
 }
 
 async function descargarPdf(id,kind){
@@ -1077,7 +1203,7 @@ CONTACTO_JS = json.dumps({
   "nombre": CONTACTO["nombre_es"], "ciudad": CONTACTO["ciudad_es"],
   "email": CONTACTO["email"], "tel": CONTACTO["tel"], "linkedin": CONTACTO["linkedin"],
 }, ensure_ascii=False)
-out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL)
+out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL).replace("__CV__", CV)
           .replace("__CONTACTO__", CONTACTO_JS).replace("__NOMBRE__", CONTACTO["nombre_es"])
           .replace("__N__", str(len(rows))).replace("__FECHA__", FECHA))
 open('out/dashboard.html','w').write(out)

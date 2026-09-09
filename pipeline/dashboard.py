@@ -1,0 +1,1070 @@
+# -*- coding: utf-8 -*-
+import os, sys, json, base64, html
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tailor import T
+
+RES = json.load(open('data/resultado.json'))
+MAN = {m['id']: m for m in json.load(open('data/manifest.json'))}
+
+rows=[]
+for r in RES:
+    m=MAN[r['id']]
+    rows.append(dict(
+      id=r['id'], empresa=r['empresa'], puesto=r['puesto'], ubicacion=r['ubicacion'],
+      modalidad=r['modalidad'], publicada=r['publicada'], idioma=r['idioma'], fuente=r['fuente'],
+      salMin=r['sal_min'], salMax=r['sal_max'], salMedio=r['sal_medio'], salOrigen=r['sal_origen'],
+      salBase=r['sal_base'], url=r['url'], scoreOrig=r['score_orig'], scoreAdap=r['score_adap'],
+      delta=r['delta'], mejora=r['mejora_pct'], fuertes=r['fuertes'], huecos=r['huecos'],
+      alerta=r.get('alerta',''), titular=T[r['id']]['titular'],
+      resumen=T[r['id']]['resumen'],
+      reqs=[f"{l} (peso {w})" for _,w,l in sorted(r['reqs'], key=lambda x:-x[1])[:12]],
+      zona=('local' if ('Navarra' in r['modalidad'] or 'Gipuzkoa' in r['modalidad']) else 'remoto'),
+      cvName=os.path.basename(m['cv']),
+      cv=base64.b64encode(open(m['cv'],'rb').read()).decode(),
+      ambito=r['ambito'],
+    ))
+
+DATA = json.dumps(rows, ensure_ascii=False, separators=(',',':'))
+
+from base_cv import BULLETS_ES, BULLETS_EN, CONTACTO, PERFIL_LLM
+_pl = dict(PERFIL_LLM)
+_pl["tel"], _pl["email"], _pl["linkedin"] = CONTACTO["tel"], CONTACTO["email"], CONTACTO["linkedin"]
+_pl["experiencia"] = [
+    {k: v for k, v in e.items() if k != "bullets"} |
+    {"logros_es": [BULLETS_ES[b] for b in e["bullets"]],
+     "logros_en": [BULLETS_EN[b] for b in e["bullets"]]}
+    for e in PERFIL_LLM["experiencia"]]
+PERFIL = json.dumps(_pl, ensure_ascii=False, separators=(',', ':'))
+
+TPL = r"""<title>Radar de ofertas</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F5F4; --surface:#FFFFFF; --surface-2:#FAFBFB; --line:#DDE3E1; --line-soft:#EAEFED;
+  --ink:#13181A; --ink-2:#495553; --ink-3:#78857F;
+  --accent:#14625A; --accent-ink:#0D453F; --accent-soft:#DCEAE7;
+  --good:#1F7A4C; --warn:#9C6B12; --crit:#A63A34;
+  --good-bg:#E4F1E9; --warn-bg:#F7EEDA; --crit-bg:#F7E4E2;
+  --meter-track:#E4EAE8;
+  --on-accent:#FFFFFF; --int:#3B5BA5; --int-bg:#E3E9F6;
+  --shadow:0 1px 2px rgba(19,24,26,.05),0 6px 18px -10px rgba(19,24,26,.18);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0E1413; --surface:#161D1C; --surface-2:#1B2322; --line:#2A3432; --line-soft:#222C2A;
+  --ink:#E9EFEC; --ink-2:#A9B6B2; --ink-3:#7C8985;
+  --accent:#5CBFB0; --accent-ink:#8FD8CC; --accent-soft:#16302C;
+  --good:#5DC48C; --warn:#DCA83F; --crit:#E58077;
+  --good-bg:#15291F; --warn-bg:#2C2313; --crit-bg:#2E1A18;
+  --meter-track:#243230; --on-accent:#08201D; --int:#8FAEE8; --int-bg:#1B2438;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px -12px rgba(0,0,0,.6);
+}}
+:root[data-theme="dark"]{
+  --ground:#0E1413; --surface:#161D1C; --surface-2:#1B2322; --line:#2A3432; --line-soft:#222C2A;
+  --ink:#E9EFEC; --ink-2:#A9B6B2; --ink-3:#7C8985;
+  --accent:#5CBFB0; --accent-ink:#8FD8CC; --accent-soft:#16302C;
+  --good:#5DC48C; --warn:#DCA83F; --crit:#E58077;
+  --good-bg:#15291F; --warn-bg:#2C2313; --crit-bg:#2E1A18;
+  --meter-track:#243230; --on-accent:#08201D; --int:#8FAEE8; --int-bg:#1B2438;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px -12px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+.vacio{border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;background:var(--surface-2)}
+.vacio p{margin:0 0 12px;color:var(--ink-2)}
+.vacio .hint{margin:12px 0 0}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;animation:pulso 1.1s ease-in-out infinite}
+@keyframes pulso{0%,100%{opacity:.25}50%{opacity:1}}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1440px;margin:0 auto;padding:28px 20px 64px}
+header{margin-bottom:22px}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+h1{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-weight:600;font-size:clamp(28px,4vw,40px);
+  margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--ink-2);margin:0;max-width:62ch}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:22px 0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 15px;box-shadow:var(--shadow)}
+.stat .k{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.stat .v{font-family:"IBM Plex Mono",monospace;font-size:25px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:3px;letter-spacing:-.02em}
+.stat .n{font-size:12px;color:var(--ink-3);margin-top:1px}
+.toolbar{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:14px;box-shadow:var(--shadow)}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld label{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+input[type=search],select{font-family:inherit;font-size:13.5px;color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line);border-radius:7px;padding:7px 9px;min-width:150px}
+input[type=search]{min-width:230px}
+input[type=range]{width:150px;accent-color:var(--accent)}
+.rngval{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+button{font-family:inherit;cursor:pointer}
+.reset{background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:7px;padding:7px 12px;font-size:13px}
+.reset:hover{border-color:var(--accent);color:var(--accent)}
+.count{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-3);padding-bottom:7px}
+.views{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.view{background:none;border:0;border-bottom:2px solid transparent;padding:9px 14px;margin-bottom:-1px;
+  font-family:"Public Sans",sans-serif;font-size:13.5px;font-weight:600;color:var(--ink-3);
+  display:flex;align-items:center;gap:7px}
+.view:hover{color:var(--accent)}
+.view.on{color:var(--accent);border-bottom-color:var(--accent)}
+.view .n{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+  background:var(--meter-track);color:var(--ink-2);border-radius:20px;padding:1px 7px;font-variant-numeric:tabular-nums}
+.view.on .n{background:var(--accent-soft);color:var(--accent-ink)}
+.xbtn{background:none;border:1px solid transparent;border-radius:6px;color:var(--ink-3);
+  font-size:15px;line-height:1;padding:3px 7px;transition:.13s}
+.xbtn:hover{border-color:var(--crit);color:var(--crit);background:var(--crit-bg)}
+.rebtn{background:none;border:1px solid var(--line);border-radius:6px;color:var(--ink-2);
+  font-size:12px;padding:4px 9px;white-space:nowrap}
+.rebtn:hover{border-color:var(--accent);color:var(--accent)}
+.fase{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:7px;padding:5px 7px}
+.notas{width:100%;min-height:84px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.55;
+  color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.notas:focus{outline:2px solid var(--accent);outline-offset:1px}
+.track{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+.saved{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);opacity:0;transition:.2s}
+.saved.on{opacity:1}
+.p-fase{background:var(--accent-soft);color:var(--accent-ink)}
+.p-f-rechazada{background:var(--crit-bg);color:var(--crit)}
+.p-f-oferta{background:var(--good-bg);color:var(--good)}
+.p-nov-rechazo{background:var(--crit-bg);color:var(--crit)}
+.p-nov-avance{background:var(--good-bg);color:var(--good)}
+.p-nov-acuse{background:var(--meter-track);color:var(--ink-2)}
+.novbox{background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:8px;padding:9px 11px;font-size:13px;line-height:1.5}
+.novbox a{color:var(--accent);text-decoration:none}
+.novbox a:hover{text-decoration:underline}
+.huerf{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 13px;font-size:12.5px;margin-bottom:12px}
+.huerf ul{margin:6px 0 0 18px;padding:0}
+.huerf li{margin:2px 0}
+.cfgbtn{background:var(--surface);border:1px solid var(--line);border-radius:7px;color:var(--ink-2);
+  padding:7px 12px;font-size:13px;white-space:nowrap}
+.cfgbtn:hover{border-color:var(--accent);color:var(--accent)}
+.modal{position:fixed;inset:0;background:rgba(19,24,26,.55);display:flex;align-items:center;
+  justify-content:center;padding:20px;z-index:60}
+.modal .box{background:var(--ground);border-radius:14px;box-shadow:0 20px 60px -20px rgba(0,0,0,.5);
+  width:min(760px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+.modal h2{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-weight:600;font-size:24px;
+  margin:0;padding:20px 24px 0}
+.modal .body{padding:14px 24px 20px;overflow:auto}
+.modal .foot{display:flex;gap:10px;justify-content:flex-end;align-items:center;
+  padding:14px 24px;border-top:1px solid var(--line);background:var(--surface)}
+fieldset{border:1px solid var(--line);border-radius:10px;padding:14px 16px 16px;margin:0 0 16px;background:var(--surface)}
+legend{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--ink-3);padding:0 6px}
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
+@media(max-width:640px){.cgrid{grid-template-columns:1fr}}
+.cf{display:flex;flex-direction:column;gap:4px}
+.cf.full{grid-column:1/-1}
+.cf label{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.cf .h{font-size:11.5px;color:var(--ink-3);line-height:1.45}
+.cf input[type=text],.cf input[type=number],.cf textarea,.cf select{
+  font-family:inherit;font-size:13.5px;color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%}
+.cf textarea{min-height:78px;resize:vertical;line-height:1.5}
+.cf input:focus,.cf textarea:focus,.cf select:focus{outline:2px solid var(--accent);outline-offset:1px}
+.chk{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink-2);line-height:1.4}
+.chk input{accent-color:var(--accent);margin-top:2px;flex:none}
+.cfgnota{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:9px 12px;font-size:12.5px;margin:0 0 14px}
+.offline{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:12px}
+.tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto;box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;min-width:1320px}
+thead th{position:sticky;top:0;background:var(--surface);z-index:2;border-bottom:1.5px solid var(--line);
+  padding:0;text-align:left;white-space:nowrap}
+thead th button{width:100%;background:none;border:0;color:var(--ink-3);padding:11px 12px;text-align:left;
+  font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  display:flex;align-items:center;gap:5px}
+thead th button:hover{color:var(--accent)}
+thead th.on button{color:var(--accent)}
+.arrow{opacity:.35;font-size:9px}
+thead th.on .arrow{opacity:1}
+tbody tr.r{border-bottom:1px solid var(--line-soft);cursor:pointer}
+tbody tr.r:hover{background:var(--surface-2)}
+tbody tr.r.open{background:var(--accent-soft)}
+td{padding:11px 10px;vertical-align:top}
+.co{font-weight:600}
+.pt{color:var(--ink-2);font-size:13px}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:2.5px 7px;border-radius:20px;white-space:nowrap;
+  font-family:"IBM Plex Mono",monospace;letter-spacing:.02em}
+.p-rem{background:var(--good-bg);color:var(--good)} .p-hib{background:var(--warn-bg);color:var(--warn)}
+.p-pub{background:var(--good-bg);color:var(--good)} .p-est{background:var(--warn-bg);color:var(--warn)}
+.p-lang{background:var(--accent-soft);color:var(--accent-ink);border:1px solid transparent}
+.p-int{background:var(--int-bg);color:var(--int)} .p-es{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line)}
+.p-loc{background:var(--warn-bg);color:var(--warn)}
+.meter{display:flex;align-items:center;gap:7px}
+.mbar{width:56px;height:6px;border-radius:3px;background:var(--meter-track);overflow:hidden;flex:none}
+.mbar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.delta{color:var(--good);font-size:12px;font-weight:600}
+.detail td{background:var(--surface-2);border-bottom:1px solid var(--line);padding:0}
+.dwrap{position:sticky;left:0;width:min(100vw - 44px, 1396px);padding:16px 14px 20px;box-sizing:border-box}
+.dgrid{display:grid;grid-template-columns:1.35fr 1fr;gap:22px}
+@media(max-width:820px){.dgrid{grid-template-columns:1fr}}
+.dh{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 6px}
+.dsec{margin-bottom:16px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:12px;padding:3px 9px;border-radius:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2)}
+.tag.gap{background:var(--crit-bg);color:var(--crit);border-color:transparent}
+.tag.str{background:var(--good-bg);color:var(--good);border-color:transparent}
+.note{font-size:13px;color:var(--ink-2);margin:0;line-height:1.55}
+.alert{background:var(--crit-bg);color:var(--crit);border-radius:8px;padding:10px 12px;font-size:13px;margin:0 0 16px;line-height:1.5}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:4px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:8px;padding:9px 15px;font-size:13.5px;
+  font-weight:600;text-decoration:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);transition:.13s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.08);color:var(--on-accent)}
+.btn:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:flex;gap:6px;margin-bottom:7px}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:4px 2px;margin-right:10px;
+  font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tab:hover{color:var(--accent)}
+.hint{font-size:12px;color:var(--ink-3);margin:7px 0 0}
+.letter{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;
+  font-size:13px;line-height:1.6;color:var(--ink-2);white-space:pre-wrap;max-height:230px;overflow:auto}
+.empty{padding:44px;text-align:center;color:var(--ink-3)}
+footer{margin-top:26px;font-size:12.5px;color:var(--ink-3);line-height:1.7;max-width:78ch}
+footer b{color:var(--ink-2);font-weight:600}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
+  background:var(--ink);color:var(--ground);padding:10px 18px;border-radius:9px;font-size:13.5px;
+  transition:.2s;pointer-events:none;z-index:50}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">Actualizado el __FECHA__ · __N__ ofertas activas</p>
+  <h1>Radar de ofertas</h1>
+  <p class="sub">Ofertas recientes que encajan con tu perfil: 100&nbsp;% remoto desde España o desde el extranjero, y presencial o híbrido en Navarra y Gipúzcoa. Rastreadas en LinkedIn, InfoJobs, Tecnoempleo, Indeed y los portales de empleo remoto. Cada fila trae su CV adaptado al idioma de la oferta; la cover letter y el correo a RRHH se escriben desde dentro de la oferta, con un botón, sólo para las que te interesen. Pulsa cualquier fila para abrirla, o «Configuración» para cambiar qué se busca: la tarea diaria lo lee antes de cada ejecución.</p>
+</header>
+
+<div class="stats" id="stats"></div>
+
+<div class="toolbar">
+  <div class="fld"><label for="q">Buscar</label>
+    <input type="search" id="q" placeholder="empresa, puesto, tecnología…"></div>
+  <div class="fld"><label for="fmod">Modalidad</label>
+    <select id="fmod"><option value="">Todas</option><option value="remoto">Remoto</option><option value="local">Navarra / Gipuzkoa</option></select></div>
+  <div class="fld"><label for="famb">Ámbito</label>
+    <select id="famb"><option value="">Todos</option><option>España</option><option>Internacional</option><option>Navarra / Gipuzkoa</option></select></div>
+  <div class="fld"><label for="ffue">Fuente</label>
+    <select id="ffue"><option value="">Todas</option></select></div>
+  <div class="fld"><label for="flang">Idioma</label>
+    <select id="flang"><option value="">Ambos</option><option value="es">Español</option><option value="en">Inglés</option></select></div>
+  <div class="fld"><label for="fsal">Salario medio mínimo</label>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="range" id="fsal" min="35000" max="90000" step="1000" value="35000">
+      <span class="rngval" id="fsalv">35 000 €</span></div></div>
+  <div class="fld"><label for="fsc">Coincidencia mínima</label>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="range" id="fsc" min="0" max="100" step="5" value="0">
+      <span class="rngval" id="fscv">0 %</span></div></div>
+  <button class="reset" id="reset">Limpiar</button>
+  <button class="cfgbtn" id="cfgbtn">Configuración</button>
+  <span class="count" id="count"></span>
+</div>
+
+<div id="aviso"></div>
+<div class="views" id="views"></div>
+
+<div class="tablewrap">
+  <table>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+</div>
+
+<footer>
+  <p><b>Cómo se calcula la coincidencia.</b> Cada oferta tiene sus requisitos con un peso según la importancia que les da el anuncio. Un requisito puntúa 1,0 si está demostrado en un bullet o en el resumen del CV, 0,5 si sólo aparece en la lista de competencias técnicas, y 0 si no lo tienes. La columna «adaptado» aplica lo mismo al CV generado para esa oferta: la mejora sale sólo de sacar a un bullet algo que ya sabes hacer. Ningún requisito que no cumplas sube de 0.</p>
+  <p><b>Ámbito.</b> «España» es contrato y empresa aquí. «Internacional» son empresas de fuera que contratan en remoto y cuya restricción geográfica permite residir en España — está verificada oferta por oferta, pero conviene confirmarla en el primer contacto. «Navarra / Gipuzkoa» son las presenciales e híbridas dentro de tus provincias.</p>
+  <p><b>Salarios.</b> En verde, el que publica la oferta. En ámbar, una estimación; abre la fila para ver de dónde sale cada una. Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España 2026 (Universidad VIU) y Levels.fyi por empresa. Se han descartado las ofertas por debajo de 35 000 €.</p>
+</footer>
+</div>
+<div id="cfgmodal"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const DATA = __DATA__;
+const PERFIL = __PERFIL__;
+const CONTACTO = __CONTACTO__;
+const COLS = [
+ {k:'empresa', t:'Empresa'},
+ {k:'puesto', t:'Puesto'},
+ {k:'ambito', t:'Ámbito'},
+ {k:'ubicacion', t:'Ubicación'},
+ {k:'modalidad', t:'Modalidad'},
+ {k:'idioma', t:'Idioma'},
+ {k:'fuente', t:'Fuente'},
+ {k:'publicada', t:'Publicada'},
+ {k:'salMedio', t:'Salario medio', num:true},
+ {k:'salOrigen', t:'Origen'},
+ {k:'scoreOrig', t:'CV original', num:true},
+ {k:'scoreAdap', t:'CV adaptado', num:true},
+ {k:'mejora', t:'Mejora', num:true},
+];
+const FASES=['aplicada','respondida','entrevista','oferta','rechazada'];
+const FASE_ES={aplicada:'Aplicada',respondida:'Respondida',entrevista:'Entrevista',oferta:'Oferta recibida',rechazada:'Rechazada'};
+const NOV_ES={rechazo:'Rechazo',avance:'Avance',acuse:'Acuse de recibo'};
+const CFG_DEF={
+  titulos:["AI / Machine Learning Engineer","GenAI / LLM Engineer","Computer Vision Engineer",
+           "Data Scientist","Data Engineer","Full Stack Developer","Backend Developer"],
+  keywords:[], excluir_keywords:[], excluir_empresas:["Hired","Hire Feed"],
+  solo_remoto:true, areas_locales:["Navarra","Gipuzkoa"],
+  ambitos:["España","Internacional","Navarra / Gipuzkoa"],
+  salario_min:35000, exigir_salario_publicado:false, max_anios_experiencia:null,
+  ventana_horas:24, fuentes:["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Himalayas","WeWorkRemotely"]
+};
+const FUENTES_POS=["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Himalayas","WeWorkRemotely","RemoteOK"];
+const AMBITOS_POS=["España","Internacional","Navarra / Gipuzkoa"];
+const NOV_CLS={rechazo:'p-nov-rechazo',avance:'p-nov-avance',acuse:'p-nov-acuse'};
+let sortK='scoreAdap', sortDir=-1, openId=null, vista='activa';
+let STATE={}, DOCS={}, CORREO={}, db=null, dbListo=false, dbFallo=false;
+let CFG=Object.assign({},CFG_DEF), cfgAbierta=false, cfgGuardando=false;
+let sampleNs=null, sampleTried=false;
+const GEN={};   // id -> {carta:{texto,estado},mail:{...}} en curso
+
+const hoy = () => new Date().toISOString().slice(0,10);
+const st = id => STATE[id] || {estado:'activa'};
+const FASES_MOV=['respondida','entrevista','oferta'];
+const esFaseRespondida = f => FASES_MOV.includes(f);
+const esFaseAplicada   = f => !f || f==='aplicada';
+const corr = id => CORREO[id] || null;
+
+function lsLeer(){ try{ return JSON.parse(localStorage.getItem('radar-estado')||'{}'); }catch(e){ return {}; } }
+function lsGuardar(){ try{ localStorage.setItem('radar-estado', JSON.stringify(STATE)); }catch(e){} }
+
+async function initEstado(){
+  STATE = lsLeer();
+  render();
+  try{ db = await claude.use('db'); }catch(e){ db=null; }
+  if(!db){ dbFallo=true; dbListo=true; render(); return; }
+  db.collection('docs').onSnapshot(snap=>{
+    const nuevo={};
+    snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
+    DOCS=nuevo; render();
+  }, e=>{});
+  db.collection('config').onSnapshot(snap=>{
+    snap.docs.forEach(d=>{ if(d.id==='filtros' && d.data()) CFG=Object.assign({},CFG_DEF,d.data()); });
+    if(cfgAbierta) pintaCfg();
+  }, e=>{});
+  db.collection('correo').onSnapshot(snap=>{
+    const nuevo={};
+    snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
+    CORREO=nuevo; render();
+  }, e=>{});
+  db.collection('estado').onSnapshot(snap=>{
+    const nuevo={};
+    snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
+    STATE=nuevo; dbListo=true; lsGuardar(); render();
+  }, e=>{ dbFallo=true; dbListo=true; render(); });
+}
+
+let guardando=0;
+async function guardar(id, patch){
+  const previo = st(id);
+  const nuevo = Object.assign({}, previo, patch, {actualizado: new Date().toISOString()});
+  if(nuevo.estado==='activa' && !nuevo.notas && !nuevo.fase){ delete STATE[id]; }
+  else { STATE[id]=nuevo; }
+  lsGuardar(); render();
+  if(!db) return;
+  try{
+    if(STATE[id]) await db.doc('estado/'+id).set(STATE[id]);
+    else await db.doc('estado/'+id).delete();
+    marcaGuardado(id);
+  }catch(e){
+    if(e && e.code==='unavailable'){
+      try{ if(STATE[id]) await db.doc('estado/'+id).set(STATE[id]); marcaGuardado(id); return; }catch(e2){}
+    }
+    toast('No se ha podido guardar el cambio; queda en este navegador');
+  }
+}
+function marcaGuardado(id){
+  const el=document.getElementById('saved-'+id);
+  if(!el) return; el.textContent='Guardado'; el.classList.add('on');
+  setTimeout(()=>el.classList.remove('on'),1600);
+}
+const eur = n => n.toLocaleString('es-ES').replace(/ /g,' ')+' €';
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function filtered(){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const mod=document.getElementById('fmod').value;
+  const lang=document.getElementById('flang').value;
+  const amb=document.getElementById('famb').value;
+  const fue=document.getElementById('ffue').value;
+  const sal=+document.getElementById('fsal').value;
+  const sc=+document.getElementById('fsc').value;
+  let out = DATA.filter(r=>{
+    const s = st(r.id), e = s.estado;
+    if(vista==='activa'    && e!=='activa') return false;
+    if(vista==='aplicada'  && (e!=='aplicada' || !esFaseAplicada(s.fase))) return false;
+    if(vista==='respondida'&& (e!=='aplicada' || !esFaseRespondida(s.fase))) return false;
+    if(vista==='rechazada' && (e!=='aplicada' || s.fase!=='rechazada')) return false;
+    if(vista==='descartada'&& e!=='descartada') return false;
+    if(sal && r.salMedio<sal) return false;
+    if(sc && r.scoreAdap<sc) return false;
+    if(lang && r.idioma!==lang) return false;
+    if(amb && r.ambito!==amb) return false;
+    if(fue && r.fuente!==fue) return false;
+    if(mod==='remoto' && r.zona!=='remoto') return false;
+    if(mod==='local' && r.zona!=='local') return false;
+    if(q){
+      const hay=[r.empresa,r.puesto,r.ubicacion,r.titular,r.ambito,r.fuertes.join(' '),r.huecos.join(' ')].join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  const val=(r,k)=> (k==='fase'||k==='fechaAplicacion') ? (st(r.id)[k]||'')
+                  : (k==='novedad') ? ((corr(r.id)||{}).fecha||'') : r[k];
+  out.sort((a,b)=>{
+    let x=val(a,sortK), y=val(b,sortK);
+    if(x===undefined||x===null) x = typeof y==='number' ? 0 : '';
+    if(y===undefined||y===null) y = typeof x==='number' ? 0 : '';
+    if(typeof x==='string'){ const c=x.localeCompare(y,'es'); return c*sortDir; }
+    return (x-y)*sortDir;
+  });
+  return out;
+}
+
+const vistaSeguimiento = () => vista==='aplicada'||vista==='respondida'||vista==='rechazada';
+function cols(){
+  const base = COLS.slice();
+  if(vistaSeguimiento()) base.splice(2,0,{k:'fase',t:'Fase'},{k:'fechaAplicacion',t:'Aplicada el'},{k:'novedad',t:'Novedad'});
+  return base;
+}
+function renderHead(){
+  document.getElementById('head').innerHTML = cols().map(c=>{
+    const on = c.k===sortK;
+    const ar = on ? (sortDir===1?'▲':'▼') : '▲';
+    return `<th class="${on?'on':''}"><button data-k="${c.k}" aria-label="Ordenar por ${esc(c.t)}">${esc(c.t)}<span class="arrow">${ar}</span></button></th>`;
+  }).join('') + '<th></th>';
+  document.querySelectorAll('#head button').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.k;
+    if(k===sortK) sortDir*=-1; else { sortK=k; sortDir = (cols().find(c=>c.k===k)||{}).num ? -1 : 1; }
+    render();
+  });
+}
+
+const lineas = v => (Array.isArray(v)?v:[]).join('\n');
+const aLista  = v => String(v||'').split('\n').map(x=>x.trim()).filter(Boolean);
+const chks = (name, posibles, sel) => posibles.map((o,i)=>
+  `<label class="chk"><input type="checkbox" data-cfg="${name}" value="${esc(o)}" ${sel.includes(o)?'checked':''}>${esc(o)}</label>`).join('');
+
+function cfgHTML(){
+  const c = CFG;
+  return `<div class="modal" role="dialog" aria-modal="true" aria-label="Configuración del radar"><div class="box">
+    <h2>Configuración del radar</h2>
+    <div class="body">
+      <p class="cfgnota">Esto es lo que lee la tarea diaria antes de buscar. Lo que cambies aquí se aplica en la siguiente ejecución, sin tocar la tarea.</p>
+
+      <fieldset><legend>Qué se busca</legend><div class="cgrid">
+        <div class="cf full"><label for="c-tit">Puestos objetivo</label>
+          <span class="h">Uno por línea. Se usan tal cual como consulta en cada fuente.</span>
+          <textarea id="c-tit">${esc(lineas(c.titulos))}</textarea></div>
+        <div class="cf"><label for="c-kw">Palabras clave extra</label>
+          <span class="h">Una por línea. Se suman a las consultas.</span>
+          <textarea id="c-kw">${esc(lineas(c.keywords))}</textarea></div>
+        <div class="cf"><label for="c-xkw">Palabras que descartan</label>
+          <span class="h">Si aparecen en la oferta, fuera.</span>
+          <textarea id="c-xkw">${esc(lineas(c.excluir_keywords))}</textarea></div>
+        <div class="cf full"><label for="c-xemp">Empresas que descartan</label>
+          <span class="h">Intermediarias y clonadoras. Una por línea.</span>
+          <textarea id="c-xemp">${esc(lineas(c.excluir_empresas))}</textarea></div>
+      </div></fieldset>
+
+      <fieldset><legend>Dónde</legend><div class="cgrid">
+        <div class="cf full"><label class="chk"><input type="checkbox" id="c-rem" ${c.solo_remoto?'checked':''}>Sólo 100 % remoto, salvo en las zonas de abajo</label></div>
+        <div class="cf"><label for="c-loc">Zonas donde aceptas presencial o híbrido</label>
+          <span class="h">Una por línea.</span>
+          <textarea id="c-loc">${esc(lineas(c.areas_locales))}</textarea></div>
+        <div class="cf"><label>Ámbitos que cuentan</label>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">${chks('ambitos',AMBITOS_POS,c.ambitos||[])}</div></div>
+      </div></fieldset>
+
+      <fieldset><legend>Filtros</legend><div class="cgrid">
+        <div class="cf"><label for="c-sal">Salario medio mínimo (€ brutos/año)</label>
+          <input type="number" id="c-sal" min="0" step="1000" value="${c.salario_min==null?'':c.salario_min}"></div>
+        <div class="cf"><label for="c-exp">Máximo de años de experiencia exigidos</label>
+          <span class="h">Descarta las que pidan más. Vacío = no descartar por esto.</span>
+          <input type="number" id="c-exp" min="0" step="1" value="${c.max_anios_experiencia==null?'':c.max_anios_experiencia}"></div>
+        <div class="cf full"><label class="chk"><input type="checkbox" id="c-pub" ${c.exigir_salario_publicado?'checked':''}>Sólo ofertas con el salario publicado (descarta las estimadas)</label></div>
+        <div class="cf"><label for="c-ven">Ventana de búsqueda (horas)</label>
+          <span class="h">Se busca desde la última ejecución con éxito, con este mínimo. Si un día falla, la siguiente recupera lo perdido.</span>
+          <input type="number" id="c-ven" min="1" step="1" value="${c.ventana_horas==null?24:c.ventana_horas}"></div>
+        <div class="cf"><label>Fuentes activas</label>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">${chks('fuentes',FUENTES_POS,c.fuentes||[])}</div></div>
+      </div></fieldset>
+    </div>
+    <div class="foot">
+      <span class="pt" id="cfgmsg" style="margin-right:auto;font-size:12.5px"></span>
+      <button class="btn" id="cfgcancel">Cancelar</button>
+      <button class="btn primary" id="cfgsave">${cfgGuardando?'Guardando…':'Guardar'}</button>
+    </div>
+  </div></div>`;
+}
+function pintaCfg(){
+  const cont=document.getElementById('cfgmodal');
+  cont.innerHTML = cfgAbierta ? cfgHTML() : '';
+  if(!cfgAbierta) return;
+  document.getElementById('cfgcancel').onclick = cierraCfg;
+  document.getElementById('cfgsave').onclick = guardaCfg;
+  cont.querySelector('.modal').onclick = e=>{ if(e.target===cont.querySelector('.modal')) cierraCfg(); };
+}
+function abreCfg(){ cfgAbierta=true; pintaCfg(); }
+function cierraCfg(){ cfgAbierta=false; pintaCfg(); }
+function leeMarcados(name){
+  return [...document.querySelectorAll(`[data-cfg="${name}"]:checked`)].map(i=>i.value);
+}
+function numOnull(id){
+  const v=document.getElementById(id).value.trim();
+  return v==='' ? null : Number(v);
+}
+async function guardaCfg(){
+  if(cfgGuardando) return;
+  const nuevo = {
+    titulos: aLista(document.getElementById('c-tit').value),
+    keywords: aLista(document.getElementById('c-kw').value),
+    excluir_keywords: aLista(document.getElementById('c-xkw').value),
+    excluir_empresas: aLista(document.getElementById('c-xemp').value),
+    solo_remoto: document.getElementById('c-rem').checked,
+    areas_locales: aLista(document.getElementById('c-loc').value),
+    ambitos: leeMarcados('ambitos'),
+    salario_min: numOnull('c-sal'),
+    exigir_salario_publicado: document.getElementById('c-pub').checked,
+    max_anios_experiencia: numOnull('c-exp'),
+    ventana_horas: numOnull('c-ven') || 24,
+    fuentes: leeMarcados('fuentes'),
+    actualizado: new Date().toISOString()
+  };
+  if(!nuevo.titulos.length){ document.getElementById('cfgmsg').textContent='Deja al menos un puesto objetivo.'; return; }
+  if(!nuevo.fuentes.length){ document.getElementById('cfgmsg').textContent='Deja al menos una fuente activa.'; return; }
+  CFG = Object.assign({},CFG_DEF,nuevo);
+  cfgGuardando=true; pintaCfg();
+  if(!db){ cfgGuardando=false; cierraCfg(); toast('Guardado sólo en este navegador: no hay almacenamiento compartido'); return; }
+  try{
+    await db.doc('config/filtros').set(CFG);
+    cfgGuardando=false; cierraCfg(); toast('Configuración guardada. Se aplica en la próxima ejecución.');
+  }catch(e){
+    cfgGuardando=false; pintaCfg();
+    document.getElementById('cfgmsg').textContent='No se ha podido guardar; inténtalo otra vez.';
+  }
+}
+
+function novPill(id){
+  const c = corr(id);
+  if(!c) return '<span class="pt">—</span>';
+  return `<span class="pill ${NOV_CLS[c.tipo]||'p-nov-acuse'}">${esc(NOV_ES[c.tipo]||c.tipo)}</span>`
+       + `<br><span class="pt" style="font-size:11.5px">${esc(c.fecha||'')}</span>`;
+}
+function novDetalle(r){
+  const c = corr(r.id), e = st(r.id);
+  if(!c) return '';
+  const link = c.threadId
+    ? `<p style="margin-top:6px;font-size:12.5px"><a href="https://mail.google.com/mail/u/0/#all/${esc(c.threadId)}" target="_blank" rel="noopener">Abrir el hilo en Gmail &rarr;</a></p>` : '';
+  const sug = (c.tipo==='rechazo' && e.fase!=='rechazada')
+    ? `<p class="note" style="margin-top:7px"><b>Sugerencia.</b> Este correo parece un rechazo. Si lo es, pon la fase en \u00abRechazada\u00bb y dejar\u00e1 de contar como proceso vivo.</p>` : '';
+  return `<div class="dsec"><p class="dh">Novedad en el correo</p><div class="novbox">
+    <p><span class="pill ${NOV_CLS[c.tipo]||'p-nov-acuse'}">${esc(NOV_ES[c.tipo]||c.tipo)}</span>
+       <span class="pt">${esc(c.fecha||'')}${c.remitente?' \u00b7 '+esc(c.remitente):''}</span></p>
+    <p style="margin-top:5px"><b>${esc(c.asunto||'')}</b></p>
+    ${c.extracto?`<p class="note" style="margin-top:4px">${esc(c.extracto)}</p>`:''}
+    ${link}${sug}</div></div>`;
+}
+function huerfanasHTML(){
+  if(vista!=='aplicada') return '';
+  const h = (CORREO['_huerfanas']||{}).lista || [];
+  if(!h.length) return '';
+  const li = h.map(x=>`<li><b>${esc(x.empresa||'')}</b>${x.puesto?' \u2014 '+esc(x.puesto):''}${x.fecha?` <span class="pt">(${esc(x.fecha)})</span>`:''}</li>`).join('');
+  return `<div class="huerf"><p><b>En tu correo hay ${h.length} candidatura${h.length===1?'':'s'} que no est\u00e1${h.length===1?'':'n'} marcada${h.length===1?'':'s'} como aplicada aqu\u00ed.</b> Si alguna corresponde a una oferta del radar, \u00e1brela y pulsa \u00abMarcar como aplicada\u00bb.</p><ul>${li}</ul></div>`;
+}
+
+function detailHTML(r){
+  const e = st(r.id);
+  const strs = r.fuertes.map(s=>`<span class="tag str">${esc(s)}</span>`).join('');
+  const gaps = r.huecos.length ? r.huecos.map(s=>`<span class="tag gap">${esc(s)}</span>`).join('')
+                              : '<span class="tag">Sin huecos relevantes</span>';
+  return `<tr class="detail"><td colspan="${cols().length+1}"><div class="dwrap">
+    ${r.alerta?`<p class="alert"><b>Aviso.</b> ${esc(r.alerta)}</p>`:''}
+    <div class="dgrid">
+      <div>
+        <div class="dsec"><p class="dh">Titular del CV adaptado</p><p class="note"><b>${esc(r.titular)}</b></p></div>
+        <div class="dsec"><p class="dh">Lo que juega a tu favor</p><div class="tags">${strs}</div></div>
+        <div class="dsec"><p class="dh">Requisitos que no cubres</p><div class="tags">${gaps}</div>
+          <p class="note" style="margin-top:7px">Prepara una respuesta honesta para cada uno: son las preguntas que va a hacer el reclutador.</p></div>
+        <div class="dsec"><p class="dh">De dónde sale el salario</p><p class="note">${esc(r.salBase)}</p></div>
+        <div class="dsec">
+          <p class="dh">Seguimiento</p>
+          <div class="track">
+            ${e.estado==='aplicada'
+              ? `<select class="fase" data-fase="${r.id}" aria-label="Fase del proceso">${FASES.map(f=>`<option value="${f}" ${e.fase===f?'selected':''}>${FASE_ES[f]}</option>`).join('')}</select>
+                 <span class="pt" style="font-size:12.5px">Aplicada el ${esc(e.fechaAplicacion||hoy())}</span>
+                 <button class="btn" data-unapply="${r.id}" style="padding:6px 12px;font-size:12.5px">Quitar de aplicadas</button>`
+              : `<button class="btn" data-apply="${r.id}">Marcar como aplicada</button>`}
+            <span class="saved" id="saved-${r.id}"></span>
+          </div>
+          <textarea class="notas" data-notas="${r.id}" placeholder="Notas: con quién has hablado, qué te dijeron, siguiente paso…">${esc(e.notas||'')}</textarea>
+        </div>
+        ${novDetalle(r)}
+        <div class="actions">
+          <a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Aplicar en ${esc(r.fuente)} →</a>
+          <button class="btn" data-dl="cv" data-id="${r.id}">Descargar CV adaptado</button>
+        </div>
+      </div>
+      <div>
+        <div class="tabs">
+          <button class="tab ${tabAbierta(r.id)==='carta'?'on':''}" data-tab="carta" data-for="${r.id}">Cover letter</button>
+          <button class="tab ${tabAbierta(r.id)==='mail'?'on':''}" data-tab="mail" data-for="${r.id}">Correo a RRHH</button>
+        </div>
+        <div id="pane-carta-${r.id}" ${tabAbierta(r.id)==='carta'?'':'hidden'}>${panelDoc(r,'carta')}</div>
+        <div id="pane-mail-${r.id}" ${tabAbierta(r.id)==='mail'?'':'hidden'}>${panelDoc(r,'mail')}</div>
+      </div>
+    </div></div></td></tr>`;
+}
+
+const TABS={};
+const tabAbierta = id => TABS[id] || 'carta';
+const NOMBRE={carta:'cover letter', mail:'correo a RRHH'};
+const ART={carta:'la', mail:'el'};
+
+function panelDoc(r, kind){
+  const enCurso = GEN[r.id] && GEN[r.id][kind];
+  if(enCurso){
+    return `<div class="letter" id="stream-${kind}-${r.id}">${esc(enCurso.texto||'Pensando…')}</div>
+      <p class="hint"><span class="dot"></span> Generando ${ART[kind]} ${NOMBRE[kind]} con Claude…
+      <button class="btn" data-cancel="${kind}" data-id="${r.id}" style="padding:4px 10px;font-size:12px;margin-left:6px">Cancelar</button></p>`;
+  }
+  const guardado = (DOCS[r.id]||{})[kind];
+  if(guardado && guardado.texto){
+    const f = guardado.generado ? new Date(guardado.generado).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div class="letter">${esc(guardado.texto)}</div>
+      <div class="actions" style="margin-top:10px">
+        <button class="btn" data-copy="${kind}" data-id="${r.id}">Copiar</button>
+        <button class="btn" data-dlpdf="${kind}" data-id="${r.id}">Descargar PDF</button>
+        <button class="btn" data-dl="${kind}" data-id="${r.id}">.txt</button>
+        <button class="btn" data-gen="${kind}" data-id="${r.id}">Regenerar</button>
+      </div>
+      <p class="hint">${f?('Generado el '+esc(f)+'. '):''}${kind==='mail'?'Sustituye <b>[nombre]</b> por la persona de RRHH; si no sabes quién es, borra el nombre y deja el saludo.':'Repásalo antes de enviarlo: es un borrador, no un envío automático.'}</p>`;
+  }
+  return `<div class="vacio">
+      <p>Aún no has generado ${ART[kind]} ${NOMBRE[kind]} de esta oferta.</p>
+      <button class="btn primary" data-gen="${kind}" data-id="${r.id}">Generar ${NOMBRE[kind]}</button>
+      <p class="hint">Se escribe en el momento con tu perfil real y el texto de esta oferta, y se guarda aquí para que no haya que repetirlo.</p>
+    </div>`;
+}
+
+const REGLAS = `Escribes en nombre de __NOMBRE__, que se está presentando a una oferta de empleo. Reglas que no puedes saltarte:
+- NUNCA inventes experiencia, tecnología, herramienta, empresa ni titulación que no aparezca en el PERFIL. Si la oferta pide algo que él no tiene, no lo insinúes.
+- Usa logros concretos del PERFIL, con sus cifras tal y como están escritas.
+- Nombra de forma explícita el hueco principal (el requisito de más peso que no cubre) en lugar de esconderlo: un reclutador sénior detecta el maquillaje.
+- Lenguaje natural y directo, primera persona, sin adjetivos de relleno ("apasionado", "proactivo", "sinergia") ni frases hechas de plantilla.
+- Escribe en el idioma que se te indique y devuelve SOLO el texto pedido, sin comentarios ni markdown.`;
+
+function ofertaTxt(r){
+  return `Empresa: ${r.empresa}
+Puesto: ${r.puesto}
+Ubicación y modalidad: ${r.ubicacion} · ${r.modalidad} (${r.ambito})
+Salario: ${r.salMin}–${r.salMax} € (${r.salOrigen}). ${r.salBase}
+Titular con el que se presenta: ${r.titular}
+Resumen profesional adaptado a esta oferta: ${r.resumen}
+Requisitos de la oferta por peso: ${r.reqs.join('; ')}
+Puntos fuertes que sí cubre: ${(r.fuertes||[]).join('; ') || '—'}
+Huecos (NO los cubre; el principal va nombrado en el texto): ${(r.huecos||[]).join('; ') || '—'}
+${r.alerta ? 'Aviso sobre esta oferta: '+r.alerta : ''}`;
+}
+
+function prompt(r, kind){
+  const idioma = r.idioma==='es' ? 'español' : 'inglés';
+  const tarea = kind==='carta'
+    ? `Escribe la COVER LETTER en ${idioma}: saludo a la empresa, dos párrafos como máximo y despedida con su nombre. El primer párrafo conecta un logro concreto suyo con lo que pide la oferta; el segundo dice por qué esa empresa o ese producto en particular y nombra el hueco principal con naturalidad. Sin asunto y sin encabezado de datos de contacto.`
+    : `Escribe el CORREO A RRHH en ${idioma}. Formato exacto: primera línea "Asunto: ..." (o "Subject: ..." en inglés), línea en blanco, saludo usando el marcador literal [nombre], dos párrafos y firma con su nombre, teléfono, email y LinkedIn. Párrafo 1: quién es y el logro concreto que conecta con ese puesto. Párrafo 2: por qué esa empresa en particular —algo real de la oferta o de la compañía, nunca un elogio genérico— y mención al CV adjunto. Si la oferta esconde algo (cliente sin nombrar, banda salarial de otro país, país de contratación sin especificar), el correo lo pregunta. Máximo 200 palabras.`;
+  return `${REGLAS}
+
+PERFIL (datos reales, no salgas de aquí):
+${JSON.stringify(PERFIL)}
+
+OFERTA:
+${ofertaTxt(r)}
+
+TAREA: ${tarea}`;
+}
+
+async function generar(id, kind){
+  const r=DATA.find(x=>x.id===id); if(!r) return;
+  if(!sampleTried){ sampleTried=true; try{ sampleNs = await claude.use('sample'); }catch(e){ sampleNs=null; } }
+  if(!sampleNs){ toast('La generación con Claude no está disponible en esta vista.'); return; }
+  const ctrl=new AbortController();
+  GEN[id]=GEN[id]||{}; GEN[id][kind]={texto:'', ctrl};
+  TABS[id]=kind; render();
+  const pinta = t => { const el=document.getElementById(`stream-${kind}-${id}`); if(el) el.textContent=t; };
+  try{
+    const res = await sampleNs(prompt(r,kind), {
+      modelTier:'default', signal:ctrl.signal, cache:false,
+      onText:({text})=>{ if(GEN[id]&&GEN[id][kind]){ GEN[id][kind].texto=text; pinta(text); } }
+    });
+    const texto=(res.text||'').trim();
+    delete GEN[id][kind];
+    if(!texto){ render(); toast('Claude no ha devuelto texto; vuelve a intentarlo'); return; }
+    DOCS[id]=Object.assign({}, DOCS[id], {[kind]:{texto, generado:new Date().toISOString()}});
+    render();
+    if(db){ try{ await db.doc('docs/'+id).set(DOCS[id]); }catch(e){ toast('Generado, pero no se ha podido guardar; cópialo antes de recargar'); } }
+    toast(kind==='carta'?'Cover letter generada':'Correo generado');
+  }catch(e){
+    delete GEN[id][kind]; render();
+    const c=e&&e.code;
+    if(c==='cancelled') return;
+    if(c==='not_granted') toast('No has dado permiso para generar con Claude');
+    else if(c==='rate_limited') toast('Demasiadas peticiones seguidas; espera un momento');
+    else toast('No se ha podido generar el texto');
+  }
+}
+
+function renderViews(){
+  const enCurso = DATA.filter(r=>st(r.id).estado==='aplicada' && esFaseAplicada(st(r.id).fase)).length;
+  const respondidas = DATA.filter(r=>st(r.id).estado==='aplicada' && esFaseRespondida(st(r.id).fase)).length;
+  const rechazadas = DATA.filter(r=>st(r.id).estado==='aplicada' && st(r.id).fase==='rechazada').length;
+  const activas = DATA.filter(r=>st(r.id).estado==='activa').length;
+  const descartadas = DATA.filter(r=>st(r.id).estado==='descartada').length;
+  document.getElementById('views').innerHTML = [
+    ['activa','Activas',activas],['aplicada','Aplicadas',enCurso],
+    ['respondida','Respondidas',respondidas],
+    ['rechazada','Rechazadas',rechazadas],['descartada','Descartadas',descartadas]
+  ].map(([v,t,c])=>`<button class="view ${vista===v?'on':''}" data-view="${v}">${t}<span class="n">${c}</span></button>`).join('');
+  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
+    if(vista===b.dataset.view) return;
+    vista=b.dataset.view; openId=null;
+    if(!vistaSeguimiento() && (sortK==='fase'||sortK==='fechaAplicacion'||sortK==='novedad')){ sortK='scoreAdap'; sortDir=-1; }
+    render();
+  });
+}
+function render(){
+  renderViews();
+  renderHead();
+  const rows = filtered();
+  document.getElementById('count').textContent = `${rows.length} de ${DATA.length}`;
+  const tb = document.getElementById('body');
+  if(!rows.length){
+    const msg = vista==='aplicada' ? 'Ninguna candidatura esperando respuesta. Las que marques como aplicadas salen aquí hasta que la empresa se mueva.'
+              : vista==='respondida' ? 'Ninguna candidatura con movimiento todavía. Cuando una empresa te conteste, pon la fase en «Respondida», «Entrevista» u «Oferta recibida» y saldrá aquí.'
+              : vista==='rechazada' ? 'Ninguna candidatura rechazada, de momento. Cuando te digan que no, abre la oferta y pon la fase en «Rechazada»: saldrá aquí y dejará de contar como proceso vivo.'
+              : vista==='descartada' ? 'No has descartado ninguna oferta. Las que descartes con la ✕ aparecerán aquí y podrás recuperarlas.'
+              : 'Ninguna oferta cumple estos filtros.';
+    tb.innerHTML=`<tr><td colspan="${cols().length+1}" class="empty">${msg}</td></tr>`; bind(); return; }
+  tb.innerHTML = rows.map(r=>{
+    const rem = r.zona==='remoto';
+    const det = openId===r.id ? detailHTML(r) : '';
+    const e = st(r.id);
+    const extra = vistaSeguimiento()
+      ? `<td><span class="pill ${e.fase==='rechazada'?'p-f-rechazada':(e.fase==='oferta'?'p-f-oferta':'p-fase')}">${esc(FASE_ES[e.fase]||'Aplicada')}</span></td>
+         <td class="num pt">${esc(e.fechaAplicacion||'—')}</td>
+         <td class="num">${novPill(r.id)}</td>` : '';
+    const accion = vista==='descartada'
+      ? `<td><button class="rebtn" data-restore="${r.id}">Recuperar</button></td>`
+      : `<td><button class="xbtn" data-discard="${r.id}" title="Descartar esta oferta" aria-label="Descartar ${esc(r.empresa)}">✕</button></td>`;
+    return `<tr class="r ${openId===r.id?'open':''}" data-id="${r.id}">
+      <td class="co">${esc(r.empresa)}</td>
+      <td class="pt">${esc(r.puesto)}</td>
+      ${extra}
+      <td><span class="pill ${r.ambito==='Internacional'?'p-int':(r.ambito==='España'?'p-es':'p-loc')}">${esc(r.ambito)}</span></td>
+      <td class="pt">${esc(r.ubicacion)}</td>
+      <td><span class="pill ${rem?'p-rem':'p-hib'}">${esc(r.modalidad)}</span></td>
+      <td><span class="pill p-lang">${r.idioma==='es'?'ES':'EN'}</span></td>
+      <td class="pt">${esc(r.fuente)}</td>
+      <td class="num pt">${esc(r.publicada)}</td>
+      <td class="num"><b>${eur(r.salMedio)}</b><br><span class="pt" style="font-size:11.5px">${eur(r.salMin)} – ${eur(r.salMax)}</span></td>
+      <td><span class="pill ${r.salOrigen==='publicado'?'p-pub':'p-est'}">${r.salOrigen==='publicado'?'Publicado':'Estimado'}</span></td>
+      <td class="num pt">${r.scoreOrig.toFixed(1)} %</td>
+      <td><div class="meter"><span class="mbar"><i style="width:${r.scoreAdap}%"></i></span><span class="num"><b>${r.scoreAdap.toFixed(1)} %</b></span></div></td>
+      <td class="num"><span class="delta">+${r.delta.toFixed(1)} pp</span><br><span class="pt" style="font-size:11.5px">+${r.mejora.toFixed(1)} %</span></td>
+      ${accion}
+    </tr>${det}`;
+  }).join('');
+  document.getElementById('aviso').innerHTML = (dbFallo
+    ? '<p class="offline">El almacenamiento compartido no está disponible en esta vista, así que lo que descartes o marques como aplicado se guarda solo en este navegador y no viajará a otros dispositivos.</p>'
+    : '') + huerfanasHTML();
+  bind();
+}
+
+function bind(){
+  document.querySelectorAll('tr.r').forEach(tr=>tr.onclick=e=>{
+    if(e.target.closest('a,button')) return;
+    openId = openId===tr.dataset.id ? null : tr.dataset.id; render();
+  });
+  document.querySelectorAll('[data-dl]').forEach(b=>b.onclick=()=>download(b.dataset.id,b.dataset.dl));
+  document.querySelectorAll('[data-dlpdf]').forEach(b=>b.onclick=()=>descargarPdf(b.dataset.id,b.dataset.dlpdf));
+  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{
+    const d=(DOCS[b.dataset.id]||{})[b.dataset.copy];
+    if(!d||!d.texto){ toast('Genera el texto primero'); return; }
+    try{ await navigator.clipboard.writeText(d.texto); toast('Copiado al portapapeles'); }
+    catch(e){ toast('No se ha podido copiar; selecciona el texto a mano'); }
+  });
+  document.querySelectorAll('[data-gen]').forEach(b=>b.onclick=()=>generar(b.dataset.id, b.dataset.gen));
+  document.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=()=>{
+    const g=(GEN[b.dataset.id]||{})[b.dataset.cancel];
+    if(g&&g.ctrl) g.ctrl.abort();
+    delete GEN[b.dataset.id][b.dataset.cancel]; render();
+  });
+  document.querySelectorAll('[data-discard]').forEach(b=>b.onclick=()=>{
+    const id=b.dataset.discard;
+    if(openId===id) openId=null;
+    guardar(id,{estado:'descartada'});
+    toast('Oferta descartada. La tienes en la pestaña «Descartadas».');
+  });
+  document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{
+    guardar(b.dataset.restore,{estado:'activa'}); toast('Oferta recuperada');
+  });
+  document.querySelectorAll('[data-apply]').forEach(b=>b.onclick=()=>{
+    guardar(b.dataset.apply,{estado:'aplicada', fase:'aplicada', fechaAplicacion:hoy()});
+    toast('Marcada como aplicada. La sigues en la pestaña «Aplicadas».');
+  });
+  document.querySelectorAll('[data-unapply]').forEach(b=>b.onclick=()=>{
+    guardar(b.dataset.unapply,{estado:'activa', fase:null, fechaAplicacion:null}); toast('Devuelta a activas');
+  });
+  document.querySelectorAll('[data-fase]').forEach(sel=>sel.onchange=()=>{
+    guardar(sel.dataset.fase,{fase:sel.value});
+  });
+  document.querySelectorAll('[data-notas]').forEach(ta=>{
+    let t; ta.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>{
+      const id=ta.dataset.notas, pos=ta.selectionStart;
+      guardar(id,{notas:ta.value});
+      const nuevo=document.querySelector(`[data-notas="${id}"]`);
+      if(nuevo){ nuevo.focus(); try{ nuevo.setSelectionRange(pos,pos); }catch(e){} }
+    }, 700); };
+  });
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+    const id=b.dataset.for, which=b.dataset.tab;
+    TABS[id]=which;
+    b.parentElement.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
+    document.getElementById('pane-carta-'+id).hidden = which!=='carta';
+    document.getElementById('pane-mail-'+id).hidden  = which!=='mail';
+  });
+}
+
+let dl=null, dlTried=false;
+function slug(t){ return String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').slice(0,38); }
+async function download(id,kind){
+  const r=DATA.find(x=>x.id===id);
+  let name, data;
+  if(kind==='cv'){
+    name=r.cvName;
+    const bin=atob(r.cv); const u=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+    data=u;
+  }else{
+    const d=(DOCS[id]||{})[kind];
+    if(!d||!d.texto){ toast('Genera el texto primero'); return; }
+    name = (kind==='carta'?'Carta_':'Correo_')+slug(r.empresa)+'__'+slug(r.puesto)+'.txt';
+    data = new TextEncoder().encode(d.texto);
+  }
+  await guardarArchivo(name, data);
+}
+
+async function guardarArchivo(name, data){
+  if(!dlTried){ dlTried=true; try{ dl = await claude.use('downloads'); }catch(e){ dl=null; } }
+  if(!dl){ toast('La descarga no está disponible en esta vista; copia el texto a mano.'); return; }
+  try{
+    await dl.save({filename:name, data});
+    toast('Guardado: '+name);
+  }catch(e){
+    const c = e && e.code;
+    if(c==='declined') toast('Descarga cancelada');
+    else if(c==='rate_limited') toast('Espera un momento y vuelve a pulsar');
+    else toast('No se ha podido guardar el archivo');
+  }
+}
+
+
+/* ---------- Generación de PDF (sin dependencias: Helvetica base-14, WinAnsi) ---------- */
+const HW=[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+const HBW=[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+const CP1252={'€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,'•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159};
+
+function pdfByte(ch){
+  const c=ch.codePointAt(0);
+  if(c===9) return 32;
+  if(c>=32 && c<256) return c;
+  if(CP1252[ch]!==undefined) return CP1252[ch];
+  const b=ch.normalize('NFD').replace(/[^\x20-\x7e]/g,'');
+  return b ? b.codePointAt(0) : 63;
+}
+function anchoCar(ch,bold){
+  const t=bold?HBW:HW, c=ch.codePointAt(0);
+  if(c>=32&&c<=126) return t[c-32];
+  if(ch==='—'||ch==='…') return 1000;
+  if(ch==='–'||ch==='€') return 556;
+  if(ch==='“'||ch==='”') return bold?500:333;
+  if(ch==='‘'||ch==='’') return bold?278:222;
+  const b=ch.normalize('NFD').replace(/[^\x20-\x7e]/g,'');
+  return b ? t[b.codePointAt(0)-32] : 556;
+}
+function anchoTexto(s,size,bold){ let t=0; for(const ch of s) t+=anchoCar(ch,bold); return t*size/1000; }
+
+function cortarLineas(txt,size,bold,maxW){
+  const out=[];
+  for(const para of String(txt).replace(/\r/g,'').split('\n')){
+    if(!para.trim()){ out.push(''); continue; }
+    let linea='';
+    for(const pal of para.trim().split(/\s+/)){
+      const cand = linea ? linea+' '+pal : pal;
+      if(anchoTexto(cand,size,bold)<=maxW){ linea=cand; continue; }
+      if(linea) out.push(linea);
+      let p=pal;
+      while(anchoTexto(p,size,bold)>maxW && p.length>1){
+        let i=1; while(i<p.length && anchoTexto(p.slice(0,i+1),size,bold)<=maxW) i++;
+        out.push(p.slice(0,i)); p=p.slice(i);
+      }
+      linea=p;
+    }
+    out.push(linea);
+  }
+  while(out.length && out[out.length-1]==='') out.pop();
+  return out;
+}
+
+function bytesAscii(arr,s){ for(let i=0;i<s.length;i++) arr.push(s.charCodeAt(i)&0xff); }
+function bytesTexto(arr,s){
+  for(const ch of s){ const b=pdfByte(ch); if(b===40||b===41||b===92) arr.push(92); arr.push(b); }
+}
+const n2 = v => (Math.round(v*100)/100).toString();
+
+const ETIQ = {
+  carta:{es:'Carta de presentación', en:'Cover letter'},
+  mail: {es:'Correo a Recursos Humanos', en:'Email to HR'},
+};
+
+function pdfDoc(r, kind, texto){
+  const W=595.28, H=841.89, M=64, maxW=W-2*M, S=11, LEAD=16.4;
+  const idi = r.idioma==='en' ? 'en' : 'es';
+  const fecha = new Date().toLocaleDateString(idi==='en'?'en-GB':'es-ES',{day:'numeric',month:'long',year:'numeric'});
+
+  const paginas=[]; let pag=[]; let y=H-M;
+  function nuevaPagina(){ paginas.push(pag); pag=[]; y=H-M; }
+  function avanzar(dy){ y-=dy; if(y<M){ nuevaPagina(); y-=dy; } }
+  function poner(s,size,bold,gris){ pag.push({s,size,bold,gris,y}); }
+
+  avanzar(15);
+  poner(CONTACTO.nombre, 14.5, true, false);
+  avanzar(13.5);
+  poner([CONTACTO.ciudad,CONTACTO.email,CONTACTO.tel,CONTACTO.linkedin].join('  ·  '), 8.6, false, true);
+  avanzar(11);
+  pag.push({regla:true, y});
+  avanzar(21);
+  poner(r.empresa+'  ·  '+r.puesto, 10.8, true, false);
+  avanzar(12.5);
+  poner(ETIQ[kind][idi]+'  ·  '+fecha, 8.8, false, true);
+  avanzar(23);
+
+  for(const l of cortarLineas(texto,S,false,maxW)){
+    if(l===''){ avanzar(LEAD*0.6); continue; }
+    avanzar(LEAD); poner(l,S,false,false);
+  }
+  paginas.push(pag);
+
+  const N=paginas.length;
+  const idF1=3+2*N, idF2=idF1+1;
+  const bytes=[]; const off=[];
+  const obj=(id,cuerpo)=>{ off[id]=bytes.length; bytesAscii(bytes,id+' 0 obj\n'+cuerpo+'\nendobj\n'); };
+
+  bytesAscii(bytes,'%PDF-1.4\n');
+  obj(1,'<</Type/Catalog/Pages 2 0 R>>');
+  obj(2,'<</Type/Pages/Count '+N+'/Kids['+paginas.map((_,i)=>(3+2*i)+' 0 R').join(' ')+']>>');
+
+  paginas.forEach((items,i)=>{
+    const idPag=3+2*i, idCont=idPag+1;
+    obj(idPag,'<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+n2(W)+' '+n2(H)+']'
+      +'/Resources<</Font<</F1 '+idF1+' 0 R/F2 '+idF2+' 0 R>>>>/Contents '+idCont+' 0 R>>');
+    const cs=[];
+    for(const it of items){
+      if(it.regla){
+        bytesAscii(cs,'0.80 0.84 0.83 RG 0.8 w '+n2(M)+' '+n2(it.y)+' m '+n2(W-M)+' '+n2(it.y)+' l S\n');
+        continue;
+      }
+      bytesAscii(cs,'BT /'+(it.bold?'F2':'F1')+' '+n2(it.size)+' Tf '
+        +(it.gris?'0.44 0.50 0.49 rg ':'0.07 0.09 0.10 rg ')
+        +'1 0 0 1 '+n2(M)+' '+n2(it.y)+' Tm (');
+      bytesTexto(cs,it.s);
+      bytesAscii(cs,') Tj ET\n');
+    }
+    off[idCont]=bytes.length;
+    bytesAscii(bytes,idCont+' 0 obj\n<</Length '+cs.length+'>>\nstream\n');
+    for(const b of cs) bytes.push(b);
+    bytesAscii(bytes,'\nendstream\nendobj\n');
+  });
+
+  obj(idF1,'<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>');
+  obj(idF2,'<</Type/Font/Subtype/Type1/BaseFont/Helvetica-Bold/Encoding/WinAnsiEncoding>>');
+
+  const total=idF2, inicioXref=bytes.length;
+  bytesAscii(bytes,'xref\n0 '+(total+1)+'\n0000000000 65535 f \n');
+  for(let i=1;i<=total;i++) bytesAscii(bytes,String(off[i]).padStart(10,'0')+' 00000 n \n');
+  bytesAscii(bytes,'trailer\n<</Size '+(total+1)+'/Root 1 0 R>>\nstartxref\n'+inicioXref+'\n%%EOF\n');
+  return new Uint8Array(bytes);
+}
+
+async function descargarPdf(id,kind){
+  const r=DATA.find(x=>x.id===id);
+  const d=(DOCS[id]||{})[kind];
+  if(!d||!d.texto){ toast('Genera el texto primero'); return; }
+  let bytes;
+  try{ bytes=pdfDoc(r,kind,d.texto); }
+  catch(e){ toast('No se ha podido construir el PDF; descárgalo en .txt'); return; }
+  await guardarArchivo((kind==='carta'?'Carta_':'Correo_')+slug(r.empresa)+'__'+slug(r.puesto)+'.pdf', bytes);
+}
+
+
+let tt;
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on');
+  clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),3200); }
+
+function stats(){
+  const n=DATA.length;
+  const rem=DATA.filter(r=>r.zona==='remoto').length;
+  const med=Math.round(DATA.reduce((s,r)=>s+r.salMedio,0)/n);
+  const best=DATA.reduce((a,b)=>a.scoreAdap>b.scoreAdap?a:b);
+  const dlt=(DATA.reduce((s,r)=>s+r.delta,0)/n);
+  document.getElementById('stats').innerHTML=[
+   ['Ofertas','' +n,'en seguimiento'],
+   ['En remoto',''+rem,`${n-rem} presenciales o híbridas en Navarra y Gipuzkoa`],
+   ['Internacionales',''+DATA.filter(r=>r.ambito==='Internacional').length,'empresas de fuera que contratan desde aquí'],
+   ['Portales',''+new Set(DATA.map(r=>r.fuente)).size,'LinkedIn, InfoJobs, Tecnoempleo, Indeed y portales remotos'],
+   ['Salario medio',eur(med),'mín. filtrado: 35 000 €'],
+   ['Mejor encaje',best.scoreAdap.toFixed(1)+' %',best.empresa],
+   ['Ganancia media','+'+dlt.toFixed(1)+' pp','del CV adaptado sobre el original'],
+  ].map(([k,v,n2])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${esc(n2)}</div></div>`).join('');
+}
+
+['q','fmod','flang','famb','ffue'].forEach(id=>document.getElementById(id).oninput=render);
+const fs=document.getElementById('fsal'), fsv=document.getElementById('fsalv');
+fs.oninput=()=>{fsv.textContent=eur(+fs.value);render()};
+const fc=document.getElementById('fsc'), fcv=document.getElementById('fscv');
+fc.oninput=()=>{fcv.textContent=fc.value+' %';render()};
+document.getElementById('cfgbtn').onclick=abreCfg;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && cfgAbierta) cierraCfg(); });
+document.getElementById('reset').onclick=()=>{
+  document.getElementById('q').value=''; document.getElementById('fmod').value='';
+  document.getElementById('flang').value=''; document.getElementById('famb').value=''; document.getElementById('ffue').value=''; fs.value=35000; fsv.textContent=eur(35000);
+  fc.value=0; fcv.textContent='0 %'; openId=null; render();
+};
+fsv.textContent=eur(35000);
+document.getElementById('ffue').insertAdjacentHTML('beforeend',
+  [...new Set(DATA.map(r=>r.fuente))].sort().map(f=>`<option>${esc(f)}</option>`).join(''));
+stats(); render(); initEstado();
+</script>"""
+
+import datetime
+MESES = ["enero","febrero","marzo","abril","mayo","junio","julio",
+         "agosto","septiembre","octubre","noviembre","diciembre"]
+_h = datetime.date.today()
+FECHA = "%d de %s de %d" % (_h.day, MESES[_h.month-1], _h.year)
+CONTACTO_JS = json.dumps({
+  "nombre": CONTACTO["nombre_es"], "ciudad": CONTACTO["ciudad_es"],
+  "email": CONTACTO["email"], "tel": CONTACTO["tel"], "linkedin": CONTACTO["linkedin"],
+}, ensure_ascii=False)
+out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL)
+          .replace("__CONTACTO__", CONTACTO_JS).replace("__NOMBRE__", CONTACTO["nombre_es"])
+          .replace("__N__", str(len(rows))).replace("__FECHA__", FECHA))
+open('out/dashboard.html','w').write(out)
+print("bytes", len(out.encode()))

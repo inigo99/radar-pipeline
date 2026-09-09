@@ -1,0 +1,6 @@
+# Datos personales y salidas: nunca se versionan.
+data/
+out/
+cv/
+__pycache__/
+*.pyc

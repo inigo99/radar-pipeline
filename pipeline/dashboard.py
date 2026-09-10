@@ -31,6 +31,7 @@ for r in RES:
       reqs=[f"{l} (peso {w})" for _,w,l in sorted(r['reqs'], key=lambda x:-x[1])[:12]],
       zona=('local' if ('Navarra' in r['modalidad'] or 'Gipuzkoa' in r['modalidad']) else 'remoto'),
       ambito=r['ambito'],
+      prioridad=r.get('prioridad', r['score_adap']), brecha=r.get('brecha', []),
     ))
 
 DATA = json.dumps(rows, ensure_ascii=False, separators=(',',':'))
@@ -216,6 +217,8 @@ td{padding:11px 10px;vertical-align:top}
 .p-lang{background:var(--accent-soft);color:var(--accent-ink);border:1px solid transparent}
 .p-int{background:var(--int-bg);color:var(--int)} .p-es{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line)}
 .p-loc{background:var(--warn-bg);color:var(--warn)}
+.p-fam-foco{background:var(--accent-soft);color:var(--accent-ink)}
+.p-fam-otro{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line)}
 .meter{display:flex;align-items:center;gap:7px}
 .mbar{width:56px;height:6px;border-radius:3px;background:var(--meter-track);overflow:hidden;flex:none}
 .mbar i{display:block;height:100%;background:var(--accent);border-radius:3px}
@@ -231,6 +234,11 @@ td{padding:11px 10px;vertical-align:top}
 .tag{font-size:12px;padding:3px 9px;border-radius:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2)}
 .tag.gap{background:var(--crit-bg);color:var(--crit);border-color:transparent}
 .tag.str{background:var(--good-bg);color:var(--good);border-color:transparent}
+.tag.rapido{background:var(--good-bg);color:var(--good);border-color:transparent}
+.tag.medio{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.tag.lento{background:var(--crit-bg);color:var(--crit);border-color:transparent}
+.brecha-nota{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin:8px 0 0}
+.brecha-nota li{margin:2px 0}
 .note{font-size:13px;color:var(--ink-2);margin:0;line-height:1.55}
 .alert{background:var(--crit-bg);color:var(--crit);border-radius:8px;padding:10px 12px;font-size:13px;margin:0 0 16px;line-height:1.5}
 .actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:4px}
@@ -299,6 +307,8 @@ footer b{color:var(--ink-2);font-weight:600}
     <select id="fmod"><option value="">Todas</option><option value="remoto">Remoto</option><option value="local">Navarra / Gipuzkoa</option></select></div>
   <div class="fld"><label for="famb">Ámbito</label>
     <select id="famb"><option value="">Todos</option><option>España</option><option>Internacional</option><option>Navarra / Gipuzkoa</option></select></div>
+  <div class="fld"><label for="ffam">Familia</label>
+    <select id="ffam"><option value="">Todas</option></select></div>
   <div class="fld"><label for="ffue">Fuente</label>
     <select id="ffue"><option value="">Todas</option></select></div>
   <div class="fld"><label for="flang">Idioma</label>
@@ -331,6 +341,8 @@ footer b{color:var(--ink-2);font-weight:600}
 
 <footer>
   <p><b>Cómo se calcula la coincidencia.</b> Cada oferta tiene sus requisitos con un peso según la importancia que les da el anuncio. Un requisito puntúa 1,0 si está demostrado en un bullet o en el resumen del CV, 0,5 si sólo aparece en la lista de competencias técnicas, y 0 si no lo tienes. La columna «adaptado» aplica lo mismo al CV generado para esa oferta: la mejora sale sólo de sacar a un bullet algo que ya sabes hacer. Ningún requisito que no cumplas sube de 0.</p>
+  <p><b>Orden por defecto y familia.</b> La tabla abre ordenada por «prioridad»: el CV adaptado con un pequeño plus para las familias de IA y Data Science (GenAI/LLM, Machine Learning, Computer Vision, Data Science/Eng.) mientras te reorientas hacia ahí; Full Stack/Backend sigue en el radar, sólo pesa algo menos por defecto. Pulsa la columna «CV adaptado» en cualquier momento para ver el encaje puro, sin ese ajuste.</p>
+  <p><b>Requisitos que no cubres.</b> Dentro de cada oferta, los huecos van clasificados por si merece la pena repasarlos antes de una posible entrevista: en verde, cuestión de días; en ámbar, varias semanas de dedicación real; en rojo, lo que no es realista cubrir en ese plazo (una titulación, un idioma nuevo, años de experiencia, una disciplina muy especializada) — ahí la idea no es estudiar de un día para otro, es tener lista una respuesta honesta. Esto es sólo información para ti: nunca se usa para tocar el CV, la carta o el correo, que nunca dicen que sabes algo que no sabes.</p>
   <p><b>Ámbito.</b> «España» es contrato y empresa aquí. «Internacional» son empresas de fuera que contratan en remoto y cuya restricción geográfica permite residir en España — está verificada oferta por oferta, pero conviene confirmarla en el primer contacto. «Navarra / Gipuzkoa» son las presenciales e híbridas dentro de tus provincias.</p>
   <p><b>Salarios.</b> En verde, el que publica la oferta. En ámbar, una estimación; abre la fila para ver de dónde sale cada una. Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España 2026 (Universidad VIU) y Levels.fyi por empresa. El mínimo está en 45 000 €, pero las que caen por publicar una cifra más baja ya no desaparecen: van a la pestaña «Filtradas», porque un filtro que no se puede auditar acaba costando ofertas buenas sin que te enteres.</p>
   <p><b>Modalidad.</b> Se decide con la frase literal de la descripción, no con la etiqueta del portal, que miente a menudo. Cuando el portal la marca remota y la descripción no dice nada que lo contradiga, la oferta entra igual pero marcada como <em>remoto sin confirmar</em>: es una llamada de treinta segundos, no un motivo para tirarla.</p>
@@ -346,10 +358,14 @@ const CONTACTO = __CONTACTO__;
 const CV = __CV__;
 const FILTRADAS = __FILTRADAS__;
 const EMBUDO = __EMBUDO__;
+const FAMILIA_ES = {genai:'GenAI / LLM', ml:'Machine Learning', cv:'Computer Vision',
+  ds:'Data Science / Eng.', mlops:'MLOps', backend:'Full Stack / Backend', research:'Investigación'};
+const FAMILIAS_FOCO = new Set(['genai','ml','cv','ds']);
 const COLS = [
  {k:'empresa', t:'Empresa'},
  {k:'puesto', t:'Puesto'},
  {k:'ambito', t:'Ámbito'},
+ {k:'familia', t:'Familia'},
  {k:'ubicacion', t:'Ubicación'},
  {k:'modalidad', t:'Modalidad'},
  {k:'idioma', t:'Idioma'},
@@ -379,7 +395,7 @@ const CFG_DEF={
 const FUENTES_POS=["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Manfred","Himalayas","WeWorkRemotely","RemoteOK"];
 const AMBITOS_POS=["España","Internacional","Navarra / Gipuzkoa"];
 const NOV_CLS={rechazo:'p-nov-rechazo',avance:'p-nov-avance',acuse:'p-nov-acuse'};
-let sortK='scoreAdap', sortDir=-1, openId=null, vista='activa';
+let sortK='prioridad', sortDir=-1, openId=null, vista='activa';
 let STATE={}, DOCS={}, CORREO={}, db=null, dbListo=false, dbFallo=false;
 let CFG=Object.assign({},CFG_DEF), cfgAbierta=false, cfgGuardando=false;
 let sampleNs=null, sampleTried=false;
@@ -453,6 +469,7 @@ function filtered(){
   const mod=document.getElementById('fmod').value;
   const lang=document.getElementById('flang').value;
   const amb=document.getElementById('famb').value;
+  const fam=document.getElementById('ffam').value;
   const fue=document.getElementById('ffue').value;
   const sal=+document.getElementById('fsal').value;
   const sc=+document.getElementById('fsc').value;
@@ -467,6 +484,7 @@ function filtered(){
     if(sc && r.scoreAdap<sc) return false;
     if(lang && r.idioma!==lang) return false;
     if(amb && r.ambito!==amb) return false;
+    if(fam && r.familia!==fam) return false;
     if(fue && r.fuente!==fue) return false;
     if(mod==='remoto' && r.zona!=='remoto') return false;
     if(mod==='local' && r.zona!=='local') return false;
@@ -640,19 +658,28 @@ function huerfanasHTML(){
   return `<div class="huerf"><p><b>En tu correo hay ${h.length} candidatura${h.length===1?'':'s'} que no est\u00e1${h.length===1?'':'n'} marcada${h.length===1?'':'s'} como aplicada aqu\u00ed.</b> Si alguna corresponde a una oferta del radar, \u00e1brela y pulsa \u00abMarcar como aplicada\u00bb.</p><ul>${li}</ul></div>`;
 }
 
+function brechaHTML(r){
+  const b = r.brecha||[];
+  if(!b.length) return '<div class="tags"><span class="tag">Sin huecos relevantes</span></div>';
+  const tags = b.map(x=>`<span class="tag ${x.nivel}" title="${esc(x.nota)}">${esc(x.etiqueta)}</span>`).join('');
+  const estudiar = b.filter(x=>x.nivel!=='lento');
+  const lista = estudiar.length
+    ? `<ul class="brecha-nota">${estudiar.map(x=>`<li><b>${esc(x.etiqueta)}</b> <span class="pt">(${x.nivel==='rapido'?'días':'semanas'})</span> — ${esc(x.nota)}</li>`).join('')}</ul>`
+    : '';
+  return `<div class="tags">${tags}</div>${lista}
+    <p class="note" style="margin-top:7px">En verde y ámbar, lo que merece la pena repasar antes de una posible entrevista. En rojo, lo que no es realista cubrir a tiempo: mejor preparar una respuesta honesta que improvisar.</p>`;
+}
+
 function detailHTML(r){
   const e = st(r.id);
   const strs = r.fuertes.map(s=>`<span class="tag str">${esc(s)}</span>`).join('');
-  const gaps = r.huecos.length ? r.huecos.map(s=>`<span class="tag gap">${esc(s)}</span>`).join('')
-                              : '<span class="tag">Sin huecos relevantes</span>';
   return `<tr class="detail"><td colspan="${cols().length+1}"><div class="dwrap">
     ${r.alerta?`<p class="alert"><b>Aviso.</b> ${esc(r.alerta)}</p>`:''}
     <div class="dgrid">
       <div>
         <div class="dsec"><p class="dh">Titular del CV adaptado</p><p class="note"><b>${esc(r.titular)}</b></p></div>
         <div class="dsec"><p class="dh">Lo que juega a tu favor</p><div class="tags">${strs}</div></div>
-        <div class="dsec"><p class="dh">Requisitos que no cubres</p><div class="tags">${gaps}</div>
-          <p class="note" style="margin-top:7px">Prepara una respuesta honesta para cada uno: son las preguntas que va a hacer el reclutador.</p></div>
+        <div class="dsec"><p class="dh">Requisitos que no cubres</p>${brechaHTML(r)}</div>
         <div class="dsec"><p class="dh">De dónde sale el salario</p><p class="note">${esc(r.salBase)}</p></div>
         <div class="dsec">
           <p class="dh">Seguimiento</p>
@@ -811,7 +838,7 @@ function renderViews(){
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
     if(vista===b.dataset.view) return;
     vista=b.dataset.view; openId=null;
-    if(!vistaSeguimiento() && (sortK==='fase'||sortK==='fechaAplicacion'||sortK==='novedad')){ sortK='scoreAdap'; sortDir=-1; }
+    if(!vistaSeguimiento() && (sortK==='fase'||sortK==='fechaAplicacion'||sortK==='novedad')){ sortK='prioridad'; sortDir=-1; }
     render();
   });
 }
@@ -854,6 +881,7 @@ function render(){
       <td class="pt">${esc(r.puesto)}</td>
       ${extra}
       <td><span class="pill ${r.ambito==='Internacional'?'p-int':(r.ambito==='España'?'p-es':'p-loc')}">${esc(r.ambito)}</span></td>
+      <td><span class="pill ${FAMILIAS_FOCO.has(r.familia)?'p-fam-foco':'p-fam-otro'}">${esc(FAMILIA_ES[r.familia]||r.familia)}</span></td>
       <td class="pt">${esc(r.ubicacion)}</td>
       <td><span class="pill ${rem?'p-rem':'p-hib'}">${esc(r.modalidad)}</span></td>
       <td><span class="pill p-lang">${r.idioma==='es'?'ES':'EN'}</span></td>
@@ -1308,6 +1336,7 @@ function stats(){
    ['Ofertas','' +n,'en seguimiento'],
    ['En remoto',''+rem,`${n-rem} presenciales o híbridas en Navarra y Gipuzkoa`],
    ['Internacionales',''+DATA.filter(r=>r.ambito==='Internacional').length,'empresas de fuera que contratan desde aquí'],
+   ['Foco IA/DS',''+DATA.filter(r=>FAMILIAS_FOCO.has(r.familia)).length,'AI/ML, GenAI, Computer Vision o Data Science/Eng.'],
    ['Portales',''+new Set(DATA.map(r=>r.fuente)).size,'LinkedIn, InfoJobs, Tecnoempleo, Indeed y portales remotos'],
    ['Salario medio',eur(med),'mín. filtrado: 45 000 €'],
    ['Filtradas',''+FILTRADAS.length,'apartadas por salario o modalidad sin confirmar'],
@@ -1316,7 +1345,7 @@ function stats(){
   ].map(([k,v,n2])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${esc(n2)}</div></div>`).join('');
 }
 
-['q','fmod','flang','famb','ffue'].forEach(id=>document.getElementById(id).oninput=render);
+['q','fmod','flang','famb','ffam','ffue'].forEach(id=>document.getElementById(id).oninput=render);
 const fs=document.getElementById('fsal'), fsv=document.getElementById('fsalv');
 fs.oninput=()=>{fsv.textContent=eur(+fs.value);render()};
 const fc=document.getElementById('fsc'), fcv=document.getElementById('fscv');
@@ -1325,12 +1354,15 @@ document.getElementById('cfgbtn').onclick=abreCfg;
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && cfgAbierta) cierraCfg(); });
 document.getElementById('reset').onclick=()=>{
   document.getElementById('q').value=''; document.getElementById('fmod').value='';
-  document.getElementById('flang').value=''; document.getElementById('famb').value=''; document.getElementById('ffue').value=''; fs.value=35000; fsv.textContent=eur(35000);
+  document.getElementById('flang').value=''; document.getElementById('famb').value=''; document.getElementById('ffam').value=''; document.getElementById('ffue').value=''; fs.value=35000; fsv.textContent=eur(35000);
   fc.value=0; fcv.textContent='0 %'; openId=null; render();
 };
 fsv.textContent=eur(35000);
 document.getElementById('ffue').insertAdjacentHTML('beforeend',
   [...new Set(DATA.map(r=>r.fuente))].sort().map(f=>`<option>${esc(f)}</option>`).join(''));
+document.getElementById('ffam').insertAdjacentHTML('beforeend',
+  [...new Set(DATA.map(r=>r.familia))].sort((a,b)=>(FAMILIA_ES[a]||a).localeCompare(FAMILIA_ES[b]||b,'es'))
+    .map(f=>`<option value="${esc(f)}">${esc(FAMILIA_ES[f]||f)}</option>`).join(''));
 stats(); render(); initEstado();
 </script>"""
 

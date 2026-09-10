@@ -5,6 +5,19 @@ from tailor import T
 
 RES = json.load(open('data/resultado.json'))
 
+
+def _opcional(nombre, defecto):
+    """data/filtradas.json y data/embudo.json pueden no existir todavía."""
+    try:
+        with open('data/' + nombre, encoding='utf-8') as fh:
+            return json.load(fh)
+    except (IOError, OSError, ValueError):
+        return defecto
+
+
+FILTRADAS = _opcional('filtradas.json', {})
+EMBUDO = _opcional('embudo.json', {})
+
 rows=[]
 for r in RES:
     rows.append(dict(
@@ -21,6 +34,11 @@ for r in RES:
     ))
 
 DATA = json.dumps(rows, ensure_ascii=False, separators=(',',':'))
+FILTRADAS_JS = json.dumps(sorted(FILTRADAS.values(),
+                                 key=lambda f: (f.get('fecha', ''), f.get('empresa', '')),
+                                 reverse=True),
+                          ensure_ascii=False, separators=(',', ':'))
+EMBUDO_JS = json.dumps(EMBUDO, ensure_ascii=False, separators=(',', ':'))
 
 from base_cv import (BULLETS_ES, BULLETS_EN, SKILLS_ES, SKILLS_EN, CONTACTO,
                       ORDEN, ORDEN_SKILLS, CV_LABELS, PERFIL_LLM)
@@ -71,6 +89,9 @@ TPL = r"""<title>Radar de ofertas</title>
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px -12px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
+/* No dependemos de la hoja del envoltorio del artifact: la barra de filtros
+   tiene display:flex y sin esto seguiría viéndose en las vistas de panel. */
+[hidden]{display:none!important}
 .vacio{border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;background:var(--surface-2)}
 .vacio p{margin:0 0 12px;color:var(--ink-2)}
 .vacio .hint{margin:12px 0 0}
@@ -229,6 +250,30 @@ td{padding:11px 10px;vertical-align:top}
 .letter{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;
   font-size:13px;line-height:1.6;color:var(--ink-2);white-space:pre-wrap;max-height:230px;overflow:auto}
 .empty{padding:44px;text-align:center;color:var(--ink-3)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:18px 20px 22px;box-shadow:var(--shadow)}
+.panel h3{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-weight:600;
+  font-size:19px;margin:0 0 4px;letter-spacing:-.01em}
+.panel .lede{color:var(--ink-2);margin:0 0 16px;max-width:74ch;font-size:13.5px;line-height:1.6}
+.panel h4{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-3);margin:22px 0 8px}
+.ptab{width:100%;border-collapse:collapse;min-width:0;font-size:13px}
+.ptab th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:10px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);
+  border-bottom:1px solid var(--line);padding:6px 9px 7px;white-space:nowrap}
+.ptab td{padding:8px 9px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+.ptab tr:last-child td{border-bottom:0}
+.ptab .num{text-align:right}
+.motivo{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.pill.p-mot-salario{background:var(--warn-bg);color:var(--warn)}
+.pill.p-mot-modalidad{background:var(--int-bg);color:var(--int)}
+.pill.p-mot-ambito{background:var(--crit-bg);color:var(--crit)}
+.pill.p-mot-otro{background:var(--meter-track);color:var(--ink-2)}
+.barra{height:7px;border-radius:4px;background:var(--meter-track);overflow:hidden;min-width:70px}
+.barra i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.flaca{color:var(--ink-3);font-style:italic}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+@media(max-width:640px){.ptab{font-size:12px}.ptab th,.ptab td{padding:6px 5px}}
 footer{margin-top:26px;font-size:12.5px;color:var(--ink-3);line-height:1.7;max-width:78ch}
 footer b{color:var(--ink-2);font-weight:600}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
@@ -274,17 +319,21 @@ footer b{color:var(--ink-2);font-weight:600}
 <div id="aviso"></div>
 <div class="views" id="views"></div>
 
-<div class="tablewrap">
+<div class="tablewrap" id="tablawrap">
   <table>
     <thead><tr id="head"></tr></thead>
     <tbody id="body"></tbody>
   </table>
 </div>
 
+<div id="panelFiltradas" hidden></div>
+<div id="panelEmbudo" hidden></div>
+
 <footer>
   <p><b>Cómo se calcula la coincidencia.</b> Cada oferta tiene sus requisitos con un peso según la importancia que les da el anuncio. Un requisito puntúa 1,0 si está demostrado en un bullet o en el resumen del CV, 0,5 si sólo aparece en la lista de competencias técnicas, y 0 si no lo tienes. La columna «adaptado» aplica lo mismo al CV generado para esa oferta: la mejora sale sólo de sacar a un bullet algo que ya sabes hacer. Ningún requisito que no cumplas sube de 0.</p>
   <p><b>Ámbito.</b> «España» es contrato y empresa aquí. «Internacional» son empresas de fuera que contratan en remoto y cuya restricción geográfica permite residir en España — está verificada oferta por oferta, pero conviene confirmarla en el primer contacto. «Navarra / Gipuzkoa» son las presenciales e híbridas dentro de tus provincias.</p>
-  <p><b>Salarios.</b> En verde, el que publica la oferta. En ámbar, una estimación; abre la fila para ver de dónde sale cada una. Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España 2026 (Universidad VIU) y Levels.fyi por empresa. Se han descartado las ofertas por debajo de 35 000 €.</p>
+  <p><b>Salarios.</b> En verde, el que publica la oferta. En ámbar, una estimación; abre la fila para ver de dónde sale cada una. Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España 2026 (Universidad VIU) y Levels.fyi por empresa. El mínimo está en 45 000 €, pero las que caen por publicar una cifra más baja ya no desaparecen: van a la pestaña «Filtradas», porque un filtro que no se puede auditar acaba costando ofertas buenas sin que te enteres.</p>
+  <p><b>Modalidad.</b> Se decide con la frase literal de la descripción, no con la etiqueta del portal, que miente a menudo. Cuando el portal la marca remota y la descripción no dice nada que lo contradiga, la oferta entra igual pero marcada como <em>remoto sin confirmar</em>: es una llamada de treinta segundos, no un motivo para tirarla.</p>
 </footer>
 </div>
 <div id="cfgmodal"></div>
@@ -295,6 +344,8 @@ const DATA = __DATA__;
 const PERFIL = __PERFIL__;
 const CONTACTO = __CONTACTO__;
 const CV = __CV__;
+const FILTRADAS = __FILTRADAS__;
+const EMBUDO = __EMBUDO__;
 const COLS = [
  {k:'empresa', t:'Empresa'},
  {k:'puesto', t:'Puesto'},
@@ -315,14 +366,17 @@ const FASE_ES={aplicada:'Aplicada',respondida:'Respondida',entrevista:'Entrevist
 const NOV_ES={rechazo:'Rechazo',avance:'Avance',acuse:'Acuse de recibo'};
 const CFG_DEF={
   titulos:["AI / Machine Learning Engineer","GenAI / LLM Engineer","Computer Vision Engineer",
-           "Data Scientist","Data Engineer","Full Stack Developer","Backend Developer"],
+           "Data Scientist","Data Engineer","Full Stack Developer","Backend Developer",
+           "Software Engineer","Python Developer","MLOps Engineer","Forward Deployed Engineer"],
   keywords:[], excluir_keywords:[], excluir_empresas:["Hired","Hire Feed"],
   solo_remoto:true, areas_locales:["Navarra","Gipuzkoa"],
   ambitos:["España","Internacional","Navarra / Gipuzkoa"],
-  salario_min:35000, exigir_salario_publicado:false, max_anios_experiencia:null,
-  ventana_horas:24, fuentes:["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Himalayas","WeWorkRemotely"]
+  salario_min:45000, exigir_salario_publicado:false, max_anios_experiencia:null,
+  ventana_horas:24,
+  fuentes:["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Manfred"],
+  fuentes_semanales:["Himalayas","WeWorkRemotely","RemoteOK"]
 };
-const FUENTES_POS=["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Himalayas","WeWorkRemotely","RemoteOK"];
+const FUENTES_POS=["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Manfred","Himalayas","WeWorkRemotely","RemoteOK"];
 const AMBITOS_POS=["España","Internacional","Navarra / Gipuzkoa"];
 const NOV_CLS={rechazo:'p-nov-rechazo',avance:'p-nov-avance',acuse:'p-nov-acuse'};
 let sortK='scoreAdap', sortDir=-1, openId=null, vista='activa';
@@ -750,7 +804,9 @@ function renderViews(){
   document.getElementById('views').innerHTML = [
     ['activa','Activas',activas],['aplicada','Aplicadas',enCurso],
     ['respondida','Respondidas',respondidas],
-    ['rechazada','Rechazadas',rechazadas],['descartada','Descartadas',descartadas]
+    ['rechazada','Rechazadas',rechazadas],['descartada','Descartadas',descartadas],
+    ['filtrada','Filtradas',FILTRADAS.length],
+    ['embudo','Embudo',(EMBUDO.total||{}).candidaturas||0]
   ].map(([v,t,c])=>`<button class="view ${vista===v?'on':''}" data-view="${v}">${t}<span class="n">${c}</span></button>`).join('');
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
     if(vista===b.dataset.view) return;
@@ -759,8 +815,18 @@ function renderViews(){
     render();
   });
 }
+/* Las dos vistas nuevas no son tablas de ofertas, así que se pintan aparte y
+   se esconde la tabla principal en vez de forzarla a un formato que no es. */
+const vistaPanel = () => vista==='filtrada' || vista==='embudo';
+
 function render(){
   renderViews();
+  document.getElementById('tablawrap').hidden = vistaPanel();
+  document.querySelector('.toolbar').hidden = vistaPanel();
+  document.getElementById('panelFiltradas').hidden = vista!=='filtrada';
+  document.getElementById('panelEmbudo').hidden = vista!=='embudo';
+  if(vista==='filtrada'){ renderFiltradas(); return; }
+  if(vista==='embudo'){ renderEmbudo(); return; }
   renderHead();
   const rows = filtered();
   document.getElementById('count').textContent = `${rows.length} de ${DATA.length}`;
@@ -1159,6 +1225,79 @@ let tt;
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on');
   clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),3200); }
 
+const MOT_CLS={salario:'p-mot-salario',modalidad:'p-mot-modalidad',ambito:'p-mot-ambito'};
+const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experiencia:'Experiencia',otro:'Otro'};
+
+/* Lo que el filtro tiró. Existe porque un descarte silencioso no se puede
+   discutir: si el mínimo de salario está mal puesto, aquí se ve. */
+function renderFiltradas(){
+  const cont=document.getElementById('panelFiltradas');
+  if(!FILTRADAS.length){
+    cont.innerHTML='<div class="panel"><h3>Filtradas</h3><p class="lede">Todavía no hay ninguna. Aquí van a parar las ofertas que encajan por título y por fecha pero que el filtro descarta: las que publican un salario por debajo de tu mínimo, y las que el portal marca como remotas sin que la descripción lo confirme. Se guardan para que puedas ver lo que el filtro te está costando, y para que puedas cambiarlo desde «Configuración» si crees que se pasa de estricto.</p></div>';
+    return;
+  }
+  const porMotivo={};
+  FILTRADAS.forEach(f=>{ porMotivo[f.motivo||'otro']=(porMotivo[f.motivo||'otro']||0)+1; });
+  const resumen=Object.entries(porMotivo).sort((a,b)=>b[1]-a[1])
+    .map(([m,n])=>`${n} por ${(MOT_ES[m]||m).toLowerCase()}`).join(', ');
+  cont.innerHTML=`<div class="panel">
+    <h3>Filtradas</h3>
+    <p class="lede">Ofertas que encajaban por título y por fecha pero que el filtro apartó: ${esc(resumen)}. No es una lista de descartes definitivos, es lo que te está costando la configuración actual. Si ves aquí demasiadas cosas buenas, baja el mínimo de salario o afloja <em>solo remoto</em> desde «Configuración».</p>
+    <table class="ptab">
+      <thead><tr><th>Empresa</th><th>Puesto</th><th>Motivo</th><th>Por qué</th><th>Fuente</th><th>Fecha</th><th></th></tr></thead>
+      <tbody>${FILTRADAS.map(f=>`<tr>
+        <td><b>${esc(f.empresa||'—')}</b></td>
+        <td class="pt">${esc(f.puesto||'—')}</td>
+        <td><span class="pill ${MOT_CLS[f.motivo]||'p-mot-otro'}">${esc(MOT_ES[f.motivo]||f.motivo||'Otro')}</span></td>
+        <td class="motivo">${esc(f.detalle||'')}</td>
+        <td class="pt">${esc(f.fuente||'—')}</td>
+        <td class="num pt">${esc(f.fecha||'—')}</td>
+        <td>${f.url?`<a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">Ver</a>`:''}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+/* El embudo. La pregunta que el radar no se hacía: ¿esto convierte? */
+function renderEmbudo(){
+  const cont=document.getElementById('panelEmbudo');
+  const t=EMBUDO.total;
+  if(!t || !t.candidaturas){
+    cont.innerHTML='<div class="panel"><h3>Embudo</h3><p class="lede">Sin candidaturas registradas todavía. En cuanto marques ofertas como aplicadas, aquí aparece qué fuente convierte, qué familia de puesto responde y si la coincidencia del CV predice algo. Hasta cinco candidaturas por grupo no se muestran porcentajes: con menos, no significarían nada.</p></div>';
+    return;
+  }
+  const pct=v=>v===null||v===undefined?'<span class="flaca">muestra corta</span>':`${v.toFixed(1)} %`;
+  const tabla=(titulo,grupo,etiqueta)=>{
+    const filas=Object.entries(grupo||{}).sort((a,b)=>b[1].candidaturas-a[1].candidaturas);
+    if(!filas.length) return '';
+    return `<h4>${titulo}</h4><table class="ptab">
+      <thead><tr><th>${etiqueta}</th><th class="num">Cand.</th><th class="num">Avance</th><th class="num">Rechazo</th><th class="num">Sin respuesta</th><th class="num">Tasa</th></tr></thead>
+      <tbody>${filas.map(([k,g])=>`<tr>
+        <td>${esc(k)}</td><td class="num">${g.candidaturas}</td>
+        <td class="num">${g.avances}</td><td class="num">${g.rechazos}</td>
+        <td class="num">${g.sin_respuesta}</td><td class="num">${pct(g.tasa_respuesta)}</td>
+      </tr>`).join('')}</tbody></table>`;
+  };
+  const mediana=t.dias_mediana_respuesta!==null&&t.dias_mediana_respuesta!==undefined
+    ? ` La mediana hasta la primera respuesta humana es de ${t.dias_mediana_respuesta} días.` : '';
+  const espera=(EMBUDO.esperando||[]).length
+    ? `<h4>Las que más llevan esperando</h4><table class="ptab">
+       <thead><tr><th>Empresa</th><th>Puesto</th><th class="num">Días</th></tr></thead>
+       <tbody>${EMBUDO.esperando.map(e=>`<tr><td><b>${esc(e.empresa)}</b></td><td class="pt">${esc(e.puesto)}</td><td class="num">${e.dias_esperando}</td></tr>`).join('')}</tbody></table>` : '';
+  const sat=(EMBUDO.saturadas||[]).length
+    ? `<h4>Empresas con más peso en el radar</h4><table class="ptab">
+       <thead><tr><th>Empresa</th><th class="num">En el radar</th><th class="num">Aplicadas</th><th class="num">Respuestas</th></tr></thead>
+       <tbody>${EMBUDO.saturadas.map(e=>`<tr><td><b>${esc(e.empresa)}</b></td><td class="num">${e.en_radar}</td><td class="num">${e.aplicadas}</td><td class="num">${e.respuestas}</td></tr>`).join('')}</tbody></table>` : '';
+  cont.innerHTML=`<div class="panel">
+    <h3>Embudo</h3>
+    <p class="lede">${t.candidaturas} candidaturas sobre ${EMBUDO.n_ofertas||DATA.length} ofertas en el radar: ${t.avances} con avance, ${t.rechazos} rechazadas y ${t.sin_respuesta} sin respuesta humana.${mediana} Un acuse de recibo automático no cuenta como respuesta: lo manda el ATS, no una persona. Si la tasa no cambia entre los tramos de coincidencia, es que la puntuación no está prediciendo nada y hay que cambiarla, no seguir puliéndola.</p>
+    ${tabla('Por fuente',EMBUDO.por_fuente,'Fuente')}
+    ${tabla('Por familia de puesto',EMBUDO.por_familia,'Familia')}
+    ${tabla('Por coincidencia del CV',EMBUDO.por_tramo,'Tramo')}
+    <div class="pgrid">${espera}${sat}</div>
+  </div>`;
+}
+
 function stats(){
   const n=DATA.length;
   const rem=DATA.filter(r=>r.zona==='remoto').length;
@@ -1170,7 +1309,8 @@ function stats(){
    ['En remoto',''+rem,`${n-rem} presenciales o híbridas en Navarra y Gipuzkoa`],
    ['Internacionales',''+DATA.filter(r=>r.ambito==='Internacional').length,'empresas de fuera que contratan desde aquí'],
    ['Portales',''+new Set(DATA.map(r=>r.fuente)).size,'LinkedIn, InfoJobs, Tecnoempleo, Indeed y portales remotos'],
-   ['Salario medio',eur(med),'mín. filtrado: 35 000 €'],
+   ['Salario medio',eur(med),'mín. filtrado: 45 000 €'],
+   ['Filtradas',''+FILTRADAS.length,'apartadas por salario o modalidad sin confirmar'],
    ['Mejor encaje',best.scoreAdap.toFixed(1)+' %',best.empresa],
    ['Ganancia media','+'+dlt.toFixed(1)+' pp','del CV adaptado sobre el original'],
   ].map(([k,v,n2])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${esc(n2)}</div></div>`).join('');
@@ -1204,6 +1344,7 @@ CONTACTO_JS = json.dumps({
   "email": CONTACTO["email"], "tel": CONTACTO["tel"], "linkedin": CONTACTO["linkedin"],
 }, ensure_ascii=False)
 out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL).replace("__CV__", CV)
+          .replace("__FILTRADAS__", FILTRADAS_JS).replace("__EMBUDO__", EMBUDO_JS)
           .replace("__CONTACTO__", CONTACTO_JS).replace("__NOMBRE__", CONTACTO["nombre_es"])
           .replace("__N__", str(len(rows))).replace("__FECHA__", FECHA))
 open('out/dashboard.html','w').write(out)

@@ -1,0 +1,41 @@
+{
+  "_comentario": [
+    "Bandas de referencia para estimar salario cuando la oferta NO lo publica.",
+    "Existe para que la estimación deje de reinventarse cada mañana: dos ofertas",
+    "parecidas tienen que salir con la misma banda, y esa banda tiene que poder",
+    "discutirse. Si una oferta publica cifra, esto no se usa: sal_origen es",
+    "'publicado' y se copia lo que diga el anuncio.",
+    "",
+    "Cómo se usa: banda = bandas[familia][tipo_empresa], luego se aplican los",
+    "ajustes que correspondan y se redondea a milares. Anota en sal_base la",
+    "familia, el tipo y los ajustes aplicados, para que la cifra sea auditable.",
+    "",
+    "Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España",
+    "2026 (Universidad VIU) y Levels.fyi por empresa. Perfil de referencia: unos",
+    "3 años de experiencia, contratando desde España."
+  ],
+  "tipos_empresa": {
+    "producto_internacional": "Empresa de producto con sede fuera de España que contrata en remoto (scale-ups, fintech, labs de IA). Es donde están las bandas altas.",
+    "producto_espana": "Empresa de producto española o con filial aquí.",
+    "consultora": "Consultora, integrador, cárnica o intermediaria. Bandas sistemáticamente por debajo.",
+    "gran_empresa_final": "Corporación no tecnológica con equipo interno (banca, retail, industria, seguros).",
+    "centro_tecnologico": "Centro de investigación, universidad o fundación. Estabilidad a cambio de banda baja."
+  },
+  "bandas": {
+    "genai":    {"producto_internacional": [60000, 85000], "producto_espana": [50000, 68000], "consultora": [45000, 58000], "gran_empresa_final": [42000, 55000], "centro_tecnologico": [36000, 48000]},
+    "ml":       {"producto_internacional": [58000, 80000], "producto_espana": [48000, 65000], "consultora": [42000, 55000], "gran_empresa_final": [40000, 52000], "centro_tecnologico": [35000, 46000]},
+    "cv":       {"producto_internacional": [58000, 80000], "producto_espana": [46000, 62000], "consultora": [42000, 54000], "gran_empresa_final": [40000, 52000], "centro_tecnologico": [35000, 46000]},
+    "ds":       {"producto_internacional": [55000, 75000], "producto_espana": [45000, 60000], "consultora": [40000, 52000], "gran_empresa_final": [38000, 50000], "centro_tecnologico": [34000, 45000]},
+    "mlops":    {"producto_internacional": [58000, 80000], "producto_espana": [48000, 65000], "consultora": [42000, 55000], "gran_empresa_final": [40000, 53000], "centro_tecnologico": [35000, 46000]},
+    "backend":  {"producto_internacional": [52000, 72000], "producto_espana": [42000, 58000], "consultora": [36000, 48000], "gran_empresa_final": [36000, 48000], "centro_tecnologico": [33000, 44000]},
+    "research": {"producto_internacional": [55000, 78000], "producto_espana": [45000, 60000], "consultora": [40000, 52000], "gran_empresa_final": [40000, 52000], "centro_tecnologico": [34000, 46000]}
+  },
+  "ajustes": {
+    "_comentario": "Multiplicadores sobre la banda base. Se acumulan, pero no se aplican más de dos: si hacen falta tres, es que el tipo de empresa está mal elegido.",
+    "pide_5_mas_anios": {"factor": 1.12, "nota": "El anuncio pide 5+ años. La banda es de un perfil más senior que el suyo: sube la horquilla y avísale en `alerta` de que va por debajo del rango."},
+    "pide_1_2_anios": {"factor": 0.85, "nota": "Pide 1-2 años de mínimo. La banda real suele caer bastante; conviene confirmarla antes de invertir tiempo."},
+    "requiere_ingles_alto": {"factor": 1.05, "nota": "Proceso íntegramente en inglés o equipo internacional."},
+    "intermediaria_sin_cliente": {"factor": 0.95, "nota": "Publica una intermediaria sin nombrar al cliente final: la banda se estrecha y hay comisión por medio."},
+    "sector_regulado": {"factor": 1.05, "nota": "Banca, seguros, salud o defensa: pagan algo más por el cumplimiento normativo."}
+  }
+}

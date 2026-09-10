@@ -44,6 +44,8 @@ playwright ni poppler.
 | `preparar_datos.py` | snapshot o volcado de la BD | los JSON de `data/` |
 | `puntuar.py` | ofertas, perfil | `data/resultado.json` con la puntuación original, la adaptada y el foco |
 | `foco.py` | una oferta y su prioridad | el orden «foco»: prioridad menos antigüedad y menos títulos de sénior |
+| `experiencia.py` | el perfil y el texto de una oferta | los años que suma el CV y los que pide el anuncio |
+| `backfill_anios.py` | `data/` | rellena `anios_min` en las ofertas viejas leyendo sus alertas y notas (uno y no más) |
 | `embudo.py` | estado, correo, resultado | `data/embudo.json`: conversión por fuente, familia y tramo |
 | `dashboard.py` | resultado, perfil, tailor, filtradas, embudo | `out/dashboard.html`, la página completa |
 | `exportar_snapshot.py` | todo `data/` | `out/snapshot.json`, que se sube a `pipeline/snapshot` |

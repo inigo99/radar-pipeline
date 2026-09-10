@@ -34,6 +34,7 @@ for r in RES:
       prioridad=r.get('prioridad', r['score_adap']), brecha=r.get('brecha', []),
       foco=r.get('foco', r.get('prioridad', r['score_adap'])),
       dias=r.get('dias'), motivoFoco=r.get('motivo_foco',''),
+      aniosMin=r.get('anios_min'),
     ))
 
 DATA = json.dumps(rows, ensure_ascii=False, separators=(',',':'))
@@ -46,6 +47,12 @@ EMBUDO_JS = json.dumps(EMBUDO, ensure_ascii=False, separators=(',', ':'))
 from base_cv import (BULLETS_ES, BULLETS_EN, SKILLS_ES, SKILLS_EN, CONTACTO,
                       ORDEN, ORDEN_SKILLS, CV_LABELS, PERFIL_LLM,
                       TFM_VARIANT, TFG_VARIANT)
+from datos import PERFIL as _PERFIL_DOC
+from experiencia import anios_perfil, MARGEN_DEF
+
+# Los años de experiencia del CV, sumados de las fechas de sus puestos. Se
+# recalculan en cada ejecución, así que la cifra sube sola con el tiempo.
+ANIOS_PERFIL = anios_perfil(_PERFIL_DOC)
 _pl = dict(PERFIL_LLM)
 _pl["tel"], _pl["email"], _pl["linkedin"] = CONTACTO["tel"], CONTACTO["email"], CONTACTO["linkedin"]
 _pl["experiencia"] = [
@@ -107,6 +114,8 @@ body{margin:0;background:var(--ground);color:var(--ink);
   font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1440px;margin:0 auto;padding:28px 20px 64px}
 header{margin-bottom:22px}
+.hrow{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.hrow .cfgbtn{flex:none;margin-top:6px}
 .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--accent);margin:0 0 6px}
 h1{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-weight:600;font-size:clamp(28px,4vw,40px);
@@ -281,6 +290,9 @@ td{padding:11px 10px;vertical-align:top}
 .pill.p-mot-modalidad{background:var(--int-bg);color:var(--int)}
 .pill.p-mot-ambito{background:var(--crit-bg);color:var(--crit)}
 .pill.p-mot-otro{background:var(--meter-track);color:var(--ink-2)}
+.pill.p-mot-experiencia{background:var(--warn-bg);color:var(--warn)}
+.pill.p-exp-justo{background:var(--warn-bg);color:var(--warn)}
+.pill.p-exp-lejos{background:var(--crit-bg);color:var(--crit)}
 .barra{height:7px;border-radius:4px;background:var(--meter-track);overflow:hidden;min-width:70px}
 .barra i{display:block;height:100%;background:var(--accent);border-radius:4px}
 .flaca{color:var(--ink-3);font-style:italic}
@@ -317,8 +329,13 @@ footer b{color:var(--ink-2);font-weight:600}
 
 <div class="wrap">
 <header>
-  <p class="eyebrow">Actualizado el __FECHA__ · __N__ ofertas activas</p>
-  <h1>Radar de ofertas</h1>
+  <div class="hrow">
+    <div>
+      <p class="eyebrow">Actualizado el __FECHA__ · __N__ ofertas en el radar</p>
+      <h1>Radar de ofertas</h1>
+    </div>
+    <button class="cfgbtn" id="cfgbtn">Configuración</button>
+  </div>
   <p class="sub">Ofertas recientes que encajan con tu perfil: 100&nbsp;% remoto desde España o desde el extranjero, y presencial o híbrido en Navarra y Gipúzcoa. Rastreadas en LinkedIn, InfoJobs, Tecnoempleo, Indeed y los portales de empleo remoto. El CV adaptado, la cover letter y el correo a RRHH se generan desde dentro de la oferta, con un botón, sólo para las que te interesen. Pulsa cualquier fila para abrirla, o «Configuración» para cambiar qué se busca: la tarea diaria lo lee antes de cada ejecución.</p>
 </header>
 
@@ -346,7 +363,6 @@ footer b{color:var(--ink-2);font-weight:600}
       <input type="range" id="fsc" min="0" max="100" step="5" value="0">
       <span class="rngval" id="fscv">0 %</span></div></div>
   <button class="reset" id="reset">Limpiar</button>
-  <button class="cfgbtn" id="cfgbtn">Configuración</button>
   <span class="count" id="count"></span>
 </div>
 
@@ -368,6 +384,7 @@ footer b{color:var(--ink-2);font-weight:600}
   <p><b>Cómo se calcula la coincidencia.</b> Cada oferta tiene sus requisitos con un peso según la importancia que les da el anuncio. Un requisito puntúa 1,0 si está demostrado en un bullet o en el resumen del CV, 0,5 si sólo aparece en la lista de competencias técnicas, y 0 si no lo tienes. La columna «adaptado» aplica lo mismo al CV generado para esa oferta: la mejora sale sólo de sacar a un bullet algo que ya sabes hacer. Ningún requisito que no cumplas sube de 0.</p>
   <p><b>Hoy y el orden por defecto.</b> La página abre en «Hoy»: la cola corta de las seis ofertas a las que conviene echar ahora, en orden de <em>foco</em>. El foco parte de la prioridad y le resta lo que ya sabes que no va a llegar a ningún sitio: las ofertas publicadas hace más de una, dos o tres semanas (que nadie está retirando desde que el barrido de cerradas salió de la tarea diaria) y los títulos de sénior, lead o arquitecto, que son literalmente el motivo de seis de tus descartes manuales. Suma un poco cuando la oferta publica banda salarial. El contador semanal y su objetivo se guardan en este navegador.</p>
   <p><b>Prioridad y familia.</b> La tabla ordena por «prioridad»: el CV adaptado con un pequeño plus para las familias de IA y Data Science (GenAI/LLM, Machine Learning, Computer Vision, Data Science/Eng.) mientras te reorientas hacia ahí; Full Stack/Backend sigue en el radar, sólo pesa algo menos por defecto. Pulsa la columna «CV adaptado» en cualquier momento para ver el encaje puro, sin ese ajuste.</p>
+  <p><b>Años de experiencia.</b> Cada oferta lleva los años que exige el anuncio, cuando los dice. Tu CV suma los suyos solo, de las fechas de tus puestos, así que la cifra sube con el tiempo sin tocar nada. Lo que pida más de lo que tienes sale de la cola y se va a «Filtradas», separando lo que se te escapa <em>por poco</em> —dentro del margen que fijes— de lo que queda <em>lejos</em>. Nunca se borra nada, y una oferta que ya hayas aplicado o descartado no se esconde jamás. Las que no dicen años, que son la mayoría, pasan sin más: la falta de dato no aparta a nadie. Los dos números, tus años y el margen, se cambian desde «Configuración» y se aplican al momento, sin esperar a la ejecución de mañana.</p>
   <p><b>Requisitos que no cubres.</b> Dentro de cada oferta, los huecos van clasificados por si merece la pena repasarlos antes de una posible entrevista: en verde, cuestión de días; en ámbar, varias semanas de dedicación real; en rojo, lo que no es realista cubrir en ese plazo (una titulación, un idioma nuevo, años de experiencia, una disciplina muy especializada) — ahí la idea no es estudiar de un día para otro, es tener lista una respuesta honesta. Esto es sólo información para ti: nunca se usa para tocar el CV, la carta o el correo, que nunca dicen que sabes algo que no sabes.</p>
   <p><b>Ámbito.</b> «España» es contrato y empresa aquí. «Internacional» son empresas de fuera que contratan en remoto y cuya restricción geográfica permite residir en España — está verificada oferta por oferta, pero conviene confirmarla en el primer contacto. «Navarra / Gipuzkoa» son las presenciales e híbridas dentro de tus provincias.</p>
   <p><b>Salarios.</b> En verde, el que publica la oferta. En ámbar, una estimación; abre la fila para ver de dónde sale cada una. Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España 2026 (Universidad VIU) y Levels.fyi por empresa. El mínimo está en 45 000 €, pero las que caen por publicar una cifra más baja ya no desaparecen: van a la pestaña «Filtradas», porque un filtro que no se puede auditar acaba costando ofertas buenas sin que te enteres.</p>
@@ -384,6 +401,8 @@ const CONTACTO = __CONTACTO__;
 const CV = __CV__;
 const FILTRADAS = __FILTRADAS__;
 const EMBUDO = __EMBUDO__;
+const ANIOS_PERFIL = __ANIOS_PERFIL__;   // años de experiencia sumados de su CV
+const MARGEN_DEF = __MARGEN_DEF__;
 const FAMILIA_ES = {genai:'GenAI / LLM', ml:'Machine Learning', cv:'Computer Vision',
   ds:'Data Science / Eng.', mlops:'MLOps', backend:'Full Stack / Backend', research:'Investigación',
   general:'General / Perfil abierto'};
@@ -417,7 +436,8 @@ const CFG_DEF={
   keywords:[], excluir_keywords:[], excluir_empresas:["Hired","Hire Feed"],
   solo_remoto:true, areas_locales:["Navarra","Gipuzkoa"],
   ambitos:["España","Internacional","Navarra / Gipuzkoa"],
-  salario_min:45000, exigir_salario_publicado:false, max_anios_experiencia:null,
+  salario_min:45000, exigir_salario_publicado:false,
+  anios_perfil:null, margen_anios:MARGEN_DEF,
   ventana_horas:24,
   fuentes:["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Manfred"],
   fuentes_semanales:["Himalayas","WeWorkRemotely","RemoteOK"]
@@ -506,7 +526,7 @@ function filtered(){
   const sc=+document.getElementById('fsc').value;
   let out = DATA.filter(r=>{
     const s = st(r.id), e = s.estado;
-    if(vista==='activa'    && e!=='activa') return false;
+    if(vista==='activa'    && (e!=='activa' || (apartadaExp(r) && openId!==r.id))) return false;
     if(vista==='aplicada'  && (e!=='aplicada' || !esFaseAplicada(s.fase))) return false;
     if(vista==='respondida'&& (e!=='aplicada' || !esFaseRespondida(s.fase))) return false;
     if(vista==='rechazada' && (e!=='aplicada' || s.fase!=='rechazada')) return false;
@@ -595,9 +615,12 @@ function cfgHTML(){
       <fieldset><legend>Filtros</legend><div class="cgrid">
         <div class="cf"><label for="c-sal">Salario medio mínimo (€ brutos/año)</label>
           <input type="number" id="c-sal" min="0" step="1000" value="${c.salario_min==null?'':c.salario_min}"></div>
-        <div class="cf"><label for="c-exp">Máximo de años de experiencia exigidos</label>
-          <span class="h">Descarta las que pidan más. Vacío = no descartar por esto.</span>
-          <input type="number" id="c-exp" min="0" step="1" value="${c.max_anios_experiencia==null?'':c.max_anios_experiencia}"></div>
+        <div class="cf"><label for="c-exp">Tus años de experiencia</label>
+          <span class="h">Vacío = calcularlo de las fechas de tu CV (ahora, ${ANIOS_PERFIL} años).</span>
+          <input type="number" id="c-exp" min="0" step="0.5" placeholder="${ANIOS_PERFIL}" value="${c.anios_perfil==null?'':c.anios_perfil}"></div>
+        <div class="cf"><label for="c-marg">Margen de años que aún te juegas</label>
+          <span class="h">Todo lo que pida más años de los tuyos sale de la cola y va a «Filtradas». Este margen sólo separa ahí lo que se te escapa «por poco» de lo que queda «lejos».</span>
+          <input type="number" id="c-marg" min="0" step="0.5" value="${c.margen_anios==null?MARGEN_DEF:c.margen_anios}"></div>
         <div class="cf full"><label class="chk"><input type="checkbox" id="c-pub" ${c.exigir_salario_publicado?'checked':''}>Sólo ofertas con el salario publicado (descarta las estimadas)</label></div>
         <div class="cf"><label for="c-ven">Ventana de búsqueda (horas)</label>
           <span class="h">Se busca desde la última ejecución con éxito, con este mínimo. Si un día falla, la siguiente recupera lo perdido.</span>
@@ -642,7 +665,8 @@ async function guardaCfg(){
     ambitos: leeMarcados('ambitos'),
     salario_min: numOnull('c-sal'),
     exigir_salario_publicado: document.getElementById('c-pub').checked,
-    max_anios_experiencia: numOnull('c-exp'),
+    anios_perfil: numOnull('c-exp'),
+    margen_anios: numOnull('c-marg') != null ? numOnull('c-marg') : MARGEN_DEF,
     ventana_horas: numOnull('c-ven') || 24,
     fuentes: leeMarcados('fuentes'),
     actualizado: new Date().toISOString()
@@ -712,6 +736,7 @@ function detailHTML(r){
         <div class="dsec"><p class="dh">Lo que juega a tu favor</p><div class="tags">${strs}</div></div>
         <div class="dsec"><p class="dh">Requisitos que no cubres</p>${brechaHTML(r)}</div>
         <div class="dsec"><p class="dh">De dónde sale el salario</p><p class="note">${esc(r.salBase)}</p></div>
+        <div class="dsec"><p class="dh">Años de experiencia</p><p class="note">${esc(notaExp(r))}</p></div>
         <div class="dsec">
           <p class="dh">Seguimiento</p>
           <div class="track">
@@ -857,14 +882,14 @@ function renderViews(){
   const enCurso = DATA.filter(r=>st(r.id).estado==='aplicada' && esFaseAplicada(st(r.id).fase)).length;
   const respondidas = DATA.filter(r=>st(r.id).estado==='aplicada' && esFaseRespondida(st(r.id).fase)).length;
   const rechazadas = DATA.filter(r=>st(r.id).estado==='aplicada' && st(r.id).fase==='rechazada').length;
-  const activas = DATA.filter(r=>st(r.id).estado==='activa').length;
+  const activas = DATA.filter(r=>st(r.id).estado==='activa' && !apartadaExp(r)).length;
   const descartadas = DATA.filter(r=>st(r.id).estado==='descartada').length;
   document.getElementById('views').innerHTML = [
     ['hoy','Hoy',Math.max(0, objetivo()-aplicadasDesde(lunes()))],
     ['activa','Activas',activas],['aplicada','Aplicadas',enCurso],
     ['respondida','Respondidas',respondidas],
     ['rechazada','Rechazadas',rechazadas],['descartada','Descartadas',descartadas],
-    ['filtrada','Filtradas',FILTRADAS.length],
+    ['filtrada','Filtradas',FILTRADAS.length+apartadas().length],
     ['embudo','Embudo',(EMBUDO.total||{}).candidaturas||0]
   ].map(([v,t,c])=>`<button class="view ${vista===v?'on':''}" data-view="${v}">${t}<span class="n">${c}</span></button>`).join('');
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
@@ -937,6 +962,11 @@ function render(){
 }
 
 function bind(){
+  document.querySelectorAll('[data-ficha]').forEach(b=>b.onclick=()=>{
+    vista='activa'; openId=b.dataset.ficha; render();
+    const tr=document.querySelector(`tr.r[data-id="${openId}"]`);
+    if(tr) tr.scrollIntoView({block:'center'});
+  });
   document.querySelectorAll('tr.r').forEach(tr=>tr.onclick=e=>{
     if(e.target.closest('a,button')) return;
     openId = openId===tr.dataset.id ? null : tr.dataset.id; render();
@@ -1300,24 +1330,46 @@ let tt;
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on');
   clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),3200); }
 
-const MOT_CLS={salario:'p-mot-salario',modalidad:'p-mot-modalidad',ambito:'p-mot-ambito'};
+const MOT_CLS={salario:'p-mot-salario',modalidad:'p-mot-modalidad',ambito:'p-mot-ambito',experiencia:'p-mot-experiencia'};
 const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experiencia:'Experiencia',otro:'Otro'};
 
-/* Lo que el filtro tiró. Existe porque un descarte silencioso no se puede
-   discutir: si el mínimo de salario está mal puesto, aquí se ve. */
-function renderFiltradas(){
-  const cont=document.getElementById('panelFiltradas');
-  if(!FILTRADAS.length){
-    cont.innerHTML='<div class="panel"><h3>Filtradas</h3><p class="lede">Todavía no hay ninguna. Aquí van a parar las ofertas que encajan por título y por fecha pero que el filtro descarta: las que publican un salario por debajo de tu mínimo, y las que el portal marca como remotas sin que la descripción lo confirme. Se guardan para que puedas ver lo que el filtro te está costando, y para que puedas cambiarlo desde «Configuración» si crees que se pasa de estricto.</p></div>';
-    return;
-  }
+/* Lo que el filtro aparta. Existe porque un descarte silencioso no se puede
+   discutir: si el mínimo de salario o los años están mal puestos, aquí se ve.
+   Dos bloques distintos, y la diferencia importa:
+     - las apartadas AL ENTRAR (colección `filtradas`) no llegaron al radar y no
+       tienen ficha ni puntuación;
+     - las apartadas POR AÑOS siguen en `ofertas` con todo: sólo se las quita de
+       la cola, y vuelven en cuanto se toca el margen en «Configuración». */
+function tablaExperiencia(){
+  const filas = apartadas().sort((a,b)=>a.aniosMin-b.aniosMin || b.foco-a.foco);
+  if(!filas.length) return '';
+  const justo = filas.filter(r=>ajusteExp(r)==='justo').length;
+  const m = margenExp();
+  return `<h4>Apartadas por años de experiencia (${filas.length})</h4>
+    <p class="lede" style="margin-bottom:12px">Tu CV suma <b>${aniosMios()} años</b> y estas piden más, así que salen de la cola. ${justo} se te escapan «por poco» —dentro de tu margen de ${m} ${m===1?'año':'años'}—: si una de ésas te interesa de verdad, el camino es el correo directo nombrando el hueco, porque por el formulario filtra la máquina. <b>No se ha borrado ninguna</b>: siguen con su ficha entera, y suben tus años en «Configuración» (o pasa el tiempo, que se recalculan del CV) y vuelven solas a la cola.</p>
+    <table class="ptab">
+      <thead><tr><th>Empresa</th><th>Puesto</th><th class="num">Pide</th><th>Distancia</th><th>Familia</th><th class="num">Salario</th><th></th></tr></thead>
+      <tbody>${filas.map(r=>`<tr>
+        <td><b>${esc(r.empresa)}</b></td>
+        <td class="pt">${esc(r.puesto)}</td>
+        <td class="num">${r.aniosMin} años</td>
+        <td><span class="pill p-exp-${ajusteExp(r)}">${EXP_ES[ajusteExp(r)]}</span></td>
+        <td class="pt">${esc(FAMILIA_ES[r.familia]||r.familia)}</td>
+        <td class="num">${eur(r.salMedio)}</td>
+        <td style="white-space:nowrap"><button class="rebtn" data-ficha="${r.id}">Ficha</button>
+            <a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener" style="padding:4px 9px;font-size:12px">Ver</a></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+function tablaIngesta(){
+  if(!FILTRADAS.length) return '';
   const porMotivo={};
   FILTRADAS.forEach(f=>{ porMotivo[f.motivo||'otro']=(porMotivo[f.motivo||'otro']||0)+1; });
   const resumen=Object.entries(porMotivo).sort((a,b)=>b[1]-a[1])
     .map(([m,n])=>`${n} por ${(MOT_ES[m]||m).toLowerCase()}`).join(', ');
-  cont.innerHTML=`<div class="panel">
-    <h3>Filtradas</h3>
-    <p class="lede">Ofertas que encajaban por título y por fecha pero que el filtro apartó: ${esc(resumen)}. No es una lista de descartes definitivos, es lo que te está costando la configuración actual. Si ves aquí demasiadas cosas buenas, baja el mínimo de salario o afloja <em>solo remoto</em> desde «Configuración».</p>
+  return `<h4>Apartadas al entrar (${FILTRADAS.length})</h4>
+    <p class="lede" style="margin-bottom:12px">${esc(resumen)}. Éstas no llegaron al radar: el filtro las paró al buscarlas, así que no tienen ficha ni puntuación. Si ves aquí demasiadas cosas buenas, baja el mínimo de salario o afloja <em>solo remoto</em>.</p>
     <table class="ptab">
       <thead><tr><th>Empresa</th><th>Puesto</th><th>Motivo</th><th>Por qué</th><th>Fuente</th><th>Fecha</th><th></th></tr></thead>
       <tbody>${FILTRADAS.map(f=>`<tr>
@@ -1329,10 +1381,55 @@ function renderFiltradas(){
         <td class="num pt">${esc(f.fecha||'—')}</td>
         <td>${f.url?`<a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">Ver</a>`:''}</td>
       </tr>`).join('')}</tbody>
-    </table>
-  </div>`;
+    </table>`;
 }
 
+function renderFiltradas(){
+  const cont=document.getElementById('panelFiltradas');
+  const exp=tablaExperiencia(), ing=tablaIngesta();
+  if(!exp && !ing){
+    cont.innerHTML='<div class="panel"><h3>Filtradas</h3><p class="lede">Todavía no hay ninguna. Aquí van a parar las ofertas que encajan por título y por fecha pero que el filtro aparta: las que publican un salario por debajo de tu mínimo, las que el portal marca como remotas sin que la descripción lo confirme, y las que piden más años de experiencia de los que tienes. Se guardan para que puedas ver lo que el filtro te está costando y cambiarlo desde «Configuración» si se pasa de estricto.</p></div>';
+    return;
+  }
+  cont.innerHTML=`<div class="panel">
+    <h3>Filtradas</h3>
+    <p class="lede">Lo que el filtro aparta, a la vista. No es una lista de descartes definitivos: es lo que te está costando la configuración actual, para que puedas cambiarla sabiendo qué te deja fuera.</p>
+    ${exp}${ing}
+  </div>`;
+  bind();
+}
+
+
+
+/* ---------- Los años que pide la oferta contra los que tienes ----------
+   Seis de tus dieciocho descartes manuales fueron por antigüedad, no por
+   tecnología. `anios_min` lo escribe la tarea diaria leyendo el anuncio (y se
+   rellenó hacia atrás con lo que ya estaba escrito en las alertas y notas).
+   La clasificación se hace AQUÍ y no en el pipeline a propósito: así, cambiar
+   tus años o el margen desde «Configuración» devuelve ofertas a la cola en el
+   acto, sin esperar a la ejecución de mañana. Nada se borra nunca. */
+const aniosMios = () => (CFG.anios_perfil!=null && CFG.anios_perfil>0) ? +CFG.anios_perfil : ANIOS_PERFIL;
+const margenExp = () => (CFG.margen_anios!=null && CFG.margen_anios>=0) ? +CFG.margen_anios : MARGEN_DEF;
+
+function ajusteExp(r){
+  if(r.aniosMin==null) return 'desconocido';    // sin dato NUNCA se aparta una oferta
+  const falta = r.aniosMin - aniosMios();
+  if(falta <= 0.001) return 'encaja';
+  return falta <= margenExp()+0.001 ? 'justo' : 'lejos';
+}
+const EXP_ES = {justo:'Por poco', lejos:'Lejos'};
+function notaExp(r){
+  if(r.aniosMin==null) return 'La oferta no dice cuántos pide.';
+  const mios = aniosMios(), falta = Math.round((r.aniosMin-mios)*10)/10;
+  if(falta<=0) return `Pide ${r.aniosMin} años y tienes ${mios}: dentro.`;
+  return `Pide ${r.aniosMin} años y tienes ${mios}: te faltan ${falta}. `
+       + (ajusteExp(r)==='justo' ? 'Entra en tu margen, así que se aparta de la cola pero se defiende por correo directo.'
+                                 : 'Fuera de tu margen: por el formulario filtra la máquina.');
+}
+/* Una oferta con seguimiento no se esconde jamás: si la has aplicado o
+   descartada, su ficha tiene que seguir donde estaba. */
+const apartadaExp = r => st(r.id).estado==='activa' && ajusteExp(r)!=='encaja' && ajusteExp(r)!=='desconocido';
+const apartadas = () => DATA.filter(apartadaExp);
 
 /* ---------- «Hoy»: la cola de candidaturas ----------
    El cuello de botella medido el 10 sep 2026 no era encontrar ofertas (222 en el
@@ -1344,6 +1441,7 @@ const COLA_N = 6, DIAS_VIVA = 21;
 function colaHoy(){
   const suelo = +CFG.salario_min || 0;      // ni siquiera el techo de la banda llega: fuera de la cola
   return DATA.filter(r => st(r.id).estado==='activa'
+                       && !apartadaExp(r)
                        && (r.dias==null || r.dias<=DIAS_VIVA)
                        && !(suelo && r.salMax < suelo))
              .sort((a,b)=>b.foco-a.foco);
@@ -1416,11 +1514,6 @@ function renderHoy(){
   </div>`;
   const inp=document.getElementById('objsem');
   if(inp) inp.onchange=()=>{ try{ localStorage.setItem('radar-objetivo', String(parseInt(inp.value,10)||OBJ_DEF)); }catch(e){} render(); };
-  document.querySelectorAll('[data-ficha]').forEach(b=>b.onclick=()=>{
-    vista='activa'; openId=b.dataset.ficha; render();
-    const tr=document.querySelector(`tr.r[data-id="${openId}"]`);
-    if(tr) tr.scrollIntoView({block:'center'});
-  });
   bind();
 }
 
@@ -1478,7 +1571,8 @@ function stats(){
    ['Portales',''+new Set(DATA.map(r=>r.fuente)).size,'LinkedIn, InfoJobs, Tecnoempleo, Indeed y portales remotos'],
    ['Salario medio',eur(med),'mín. filtrado: 45 000 €'],
    ['Filtradas',''+FILTRADAS.length,'apartadas por salario o modalidad sin confirmar'],
-   ['Sin tocar',''+DATA.filter(r=>st(r.id).estado==='activa').length,'activas a las que aún no has aplicado ni descartado'],
+   ['Sin tocar',''+DATA.filter(r=>st(r.id).estado==='activa'&&!apartadaExp(r)).length,'activas a las que aún no has aplicado ni descartado'],
+   ['Por experiencia',''+apartadas().length,`piden más de ${aniosMios()} años; están en «Filtradas»`],
    ['Mejor encaje',best.scoreAdap.toFixed(1)+' %',best.empresa],
    ['Ganancia media','+'+dlt.toFixed(1)+' pp','del CV adaptado sobre el original'],
   ].map(([k,v,n2])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${esc(n2)}</div></div>`).join('');
@@ -1516,6 +1610,8 @@ CONTACTO_JS = json.dumps({
 }, ensure_ascii=False)
 out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL).replace("__CV__", CV)
           .replace("__FILTRADAS__", FILTRADAS_JS).replace("__EMBUDO__", EMBUDO_JS)
+          .replace("__ANIOS_PERFIL__", json.dumps(ANIOS_PERFIL))
+          .replace("__MARGEN_DEF__", json.dumps(MARGEN_DEF))
           .replace("__CONTACTO__", CONTACTO_JS).replace("__NOMBRE__", CONTACTO["nombre_es"])
           .replace("__N__", str(len(rows))).replace("__FECHA__", FECHA))
 open('out/dashboard.html','w').write(out)

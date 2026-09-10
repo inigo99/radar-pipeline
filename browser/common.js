@@ -1,15 +1,13 @@
 /* Utilidades comunes de extracción para el Radar de ofertas.
  *
- * Se carga desde una pestaña del portal con:
- *
- *   const B='https://raw.githubusercontent.com/inigo99/radar-pipeline/main/browser/';
- *   for (const f of ['common.js','linkedin.js'])
- *     eval(await fetch(B+f, {cache:'no-store'}).then(r=>r.text()));
- *   __radar.version
- *
- * Si la CSP del portal bloquea el fetch a githubusercontent, el respaldo es
- * descargarlos con `curl` en el contenedor y pegarlos: son el mismo código y
- * están probados, que es de lo que se trata.
+ * SE PEGA COMO CÓDIGO en una llamada a `javascript_tool`, al empezar con cada
+ * dominio. No se puede cargar de ninguna otra forma en linkedin.com: la CSP
+ * bloquea el `fetch` a githubusercontent (connect-src), la inyección de
+ * <script> desde jsDelivr (script-src-elem con nonce y strict-dynamic) y
+ * `eval`/`new Function` (falta unsafe-eval). Además LinkedIn parchea
+ * `localStorage`, así que cachearlo ahí tampoco vale: setItem no guarda nada.
+ * Lo que sí pasa es el código que inyecta la herramienta, porque entra por CDP
+ * y no por el parser de la página. Ver el README.
  *
  * Todo cuelga de window.__radar para no ensuciar la página. Nada de esto
  * escribe en el portal: sólo lee.

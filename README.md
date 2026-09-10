@@ -78,32 +78,28 @@ ya resuelto, para no volver a derivarlo —ni a romperlo— cada mañana:
 | `vocabulario.js` | diccionario término → regex para redactar los `reqs` |
 | `bundle.min.js` | los tres primeros, concatenados y minificados |
 
-### Cómo se cargan (y por qué no se cargan desde aquí)
+### Cómo se cargan (y por qué no hay caché)
 
-`raw.githubusercontent` **no** sirve: la CSP de LinkedIn declara `connect-src`
-restrictivo y `script-src-elem` con nonce y `strict-dynamic`, así que ni el
-`fetch` ni la inyección de `<script>` pasan. Probado el 9 de septiembre de 2026.
+**Se pegan como código** en una llamada a `javascript_tool` al empezar con cada
+dominio, y quedan en `window.__radar` para el resto de la sesión de esa pestaña.
+Unos 10 KB, una vez por dominio y ejecución.
 
-Lo que sí funciona es cachear el bundle en el almacenamiento del propio
-navegador, que persiste entre sesiones. Al principio de cada ejecución:
+Se probaron tres atajos el 9 de septiembre de 2026 y **los tres fallan en
+linkedin.com**; no vuelvas a intentarlos:
 
-```js
-// si está cacheado, esto es todo lo que cuesta
-(0,eval)(localStorage.getItem('__radarjs')); __radar.version
-```
+| Atajo | Qué pasa |
+|---|---|
+| `fetch` a `raw.githubusercontent` | Bloqueado: `connect-src` de la CSP. |
+| `<script src>` desde jsDelivr | Bloqueado: `script-src-elem` con nonce y `strict-dynamic`. |
+| Cachear en `localStorage` y `eval` | LinkedIn **parchea** `localStorage` (`Storage.prototype.setItem` ya no es nativo): `setItem` no lanza pero no guarda nada. Y aunque guardara, `eval` y `new Function` están bloqueados por CSP (`unsafe-eval` no está permitido). IndexedDB sí escribe, pero sigue haciendo falta `eval` para ejecutar lo leído, así que tampoco sirve. |
 
-Si devuelve `null` (perfil nuevo, datos borrados, otro navegador), se pega el
-contenido de `bundle.min.js` una vez y se guarda:
+El código que inyecta `javascript_tool` no pasa por la CSP porque entra por CDP,
+no por el parser de la página. Por eso pegar funciona y todo lo demás no.
 
-```js
-localStorage.setItem('__radarjs', BUNDLE);
-localStorage.setItem('__radarjs_v', '2026-09-09');
-```
-
-El bundle está troceado en sentencias independientes (`;void function(e){…}`)
-para poder pegarlo en varias llamadas sin romper la sintaxis: la salida de las
-herramientas de navegador se corta sobre los 1.200 caracteres, y la entrada
-conviene partirla también.
+Los ficheros están troceados en sentencias independientes (`;void function(e){…}`)
+para poder pegarlos en varias llamadas: la entrada y la salida de las
+herramientas de navegador se cortan sobre los 1.200 caracteres. Unir los trozos
+con `;` + `function(e){` da SyntaxError; hay que dejar el `void`.
 
 ### Dos trampas que ya costaron una tanda entera de `fetch`
 

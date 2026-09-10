@@ -5,6 +5,7 @@ from ofertas import OFERTAS
 from perfil import ORIG, prominencia_adaptada
 from tailor import T
 from aprendizaje import peso_familia, clasifica
+from foco import calcula as calcula_foco
 
 def score(o):
     tot = sum(w for _,w,_ in o["reqs"])
@@ -31,6 +32,8 @@ res=[]
 for o in OFERTAS:
     so, sa, huecos, fuertes = score(o)
     familia = (T.get(o['id']) or {}).get('familia', 'backend')
+    prioridad = round(sa*peso_familia(familia),1)
+    foco, dias, motivo = calcula_foco(o, prioridad)
     res.append(dict(o, score_orig=so, score_adap=sa,
                     delta=round(sa-so,1),
                     mejora_pct=round(100*(sa-so)/so,1) if so else 0,
@@ -39,9 +42,10 @@ for o in OFERTAS:
                     sal_medio=(o["sal_min"]+o["sal_max"])//2,
                     url=o.get('url_apply') or f"https://www.linkedin.com/jobs/view/{o['id']}/",
                     familia=familia,
-                    prioridad=round(sa*peso_familia(familia),1),
+                    prioridad=prioridad,
+                    foco=foco, dias=dias, motivo_foco=motivo,
                     brecha=brecha_aprendizaje(o)))
-res.sort(key=lambda r:-r["score_adap"])
+res.sort(key=lambda r:-r["foco"])
 json.dump(res, open('data/resultado.json','w'), ensure_ascii=False, indent=1)
 print(f"{'EMPRESA':<28}{'PUESTO':<44}{'ORIG':>6}{'ADAP':>7}{'Δ':>6}  {'SALARIO':>17}")
 for r in res:

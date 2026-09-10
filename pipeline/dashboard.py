@@ -32,6 +32,8 @@ for r in RES:
       zona=('local' if ('Navarra' in r['modalidad'] or 'Gipuzkoa' in r['modalidad']) else 'remoto'),
       ambito=r['ambito'],
       prioridad=r.get('prioridad', r['score_adap']), brecha=r.get('brecha', []),
+      foco=r.get('foco', r.get('prioridad', r['score_adap'])),
+      dias=r.get('dias'), motivoFoco=r.get('motivo_foco',''),
     ))
 
 DATA = json.dumps(rows, ensure_ascii=False, separators=(',',':'))
@@ -42,7 +44,8 @@ FILTRADAS_JS = json.dumps(sorted(FILTRADAS.values(),
 EMBUDO_JS = json.dumps(EMBUDO, ensure_ascii=False, separators=(',', ':'))
 
 from base_cv import (BULLETS_ES, BULLETS_EN, SKILLS_ES, SKILLS_EN, CONTACTO,
-                      ORDEN, ORDEN_SKILLS, CV_LABELS, PERFIL_LLM)
+                      ORDEN, ORDEN_SKILLS, CV_LABELS, PERFIL_LLM,
+                      TFM_VARIANT, TFG_VARIANT)
 _pl = dict(PERFIL_LLM)
 _pl["tel"], _pl["email"], _pl["linkedin"] = CONTACTO["tel"], CONTACTO["email"], CONTACTO["linkedin"]
 _pl["experiencia"] = [
@@ -55,7 +58,8 @@ PERFIL = json.dumps(_pl, ensure_ascii=False, separators=(',', ':'))
 # Todo lo que necesita la página para armar el CV en el navegador, bajo demanda.
 CV = json.dumps(dict(contacto=CONTACTO, bullets_es=BULLETS_ES, bullets_en=BULLETS_EN,
                      skills_es=SKILLS_ES, skills_en=SKILLS_EN, orden=ORDEN,
-                     orden_skills=ORDEN_SKILLS, labels=CV_LABELS),
+                     orden_skills=ORDEN_SKILLS, labels=CV_LABELS,
+                     tfm_variant=TFM_VARIANT, tfg_variant=TFG_VARIANT),
                 ensure_ascii=False, separators=(',', ':'))
 
 TPL = r"""<title>Radar de ofertas</title>
@@ -280,6 +284,26 @@ td{padding:11px 10px;vertical-align:top}
 .barra{height:7px;border-radius:4px;background:var(--meter-track);overflow:hidden;min-width:70px}
 .barra i{display:block;height:100%;background:var(--accent);border-radius:4px}
 .flaca{color:var(--ink-3);font-style:italic}
+.hoygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:6px}
+.tarjeta{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:14px 15px 15px;display:flex;flex-direction:column;gap:9px}
+.tarjeta .co{font-size:15px;line-height:1.3}
+.tarjeta .pt{font-size:13px;line-height:1.4}
+.tarjeta .meta{display:flex;flex-wrap:wrap;gap:6px}
+.tarjeta .acc{display:flex;flex-wrap:wrap;gap:7px;margin-top:auto;padding-top:4px}
+.tarjeta .acc .btn{padding:6px 11px;font-size:12.5px}
+.tarjeta .por{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin:0}
+.ritmo{display:flex;flex-wrap:wrap;gap:14px 26px;align-items:flex-end;margin:2px 0 18px}
+.ritmo .cifra{font-family:"IBM Plex Mono",monospace;font-size:30px;font-weight:600;
+  font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.02em}
+.ritmo .et{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.ritmo .col{display:flex;flex-direction:column}
+.ritmo .barra{width:190px;margin-top:7px}
+.objin{width:58px;font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--ink);
+  background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+.p-dias-ok{background:var(--good-bg);color:var(--good)}
+.p-dias-tibio{background:var(--warn-bg);color:var(--warn)}
+.p-dias-frio{background:var(--crit-bg);color:var(--crit)}
 .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
 @media(max-width:640px){.ptab{font-size:12px}.ptab th,.ptab td{padding:6px 5px}}
 footer{margin-top:26px;font-size:12.5px;color:var(--ink-3);line-height:1.7;max-width:78ch}
@@ -336,12 +360,14 @@ footer b{color:var(--ink-2);font-weight:600}
   </table>
 </div>
 
+<div id="panelHoy" hidden></div>
 <div id="panelFiltradas" hidden></div>
 <div id="panelEmbudo" hidden></div>
 
 <footer>
   <p><b>Cómo se calcula la coincidencia.</b> Cada oferta tiene sus requisitos con un peso según la importancia que les da el anuncio. Un requisito puntúa 1,0 si está demostrado en un bullet o en el resumen del CV, 0,5 si sólo aparece en la lista de competencias técnicas, y 0 si no lo tienes. La columna «adaptado» aplica lo mismo al CV generado para esa oferta: la mejora sale sólo de sacar a un bullet algo que ya sabes hacer. Ningún requisito que no cumplas sube de 0.</p>
-  <p><b>Orden por defecto y familia.</b> La tabla abre ordenada por «prioridad»: el CV adaptado con un pequeño plus para las familias de IA y Data Science (GenAI/LLM, Machine Learning, Computer Vision, Data Science/Eng.) mientras te reorientas hacia ahí; Full Stack/Backend sigue en el radar, sólo pesa algo menos por defecto. Pulsa la columna «CV adaptado» en cualquier momento para ver el encaje puro, sin ese ajuste.</p>
+  <p><b>Hoy y el orden por defecto.</b> La página abre en «Hoy»: la cola corta de las seis ofertas a las que conviene echar ahora, en orden de <em>foco</em>. El foco parte de la prioridad y le resta lo que ya sabes que no va a llegar a ningún sitio: las ofertas publicadas hace más de una, dos o tres semanas (que nadie está retirando desde que el barrido de cerradas salió de la tarea diaria) y los títulos de sénior, lead o arquitecto, que son literalmente el motivo de seis de tus descartes manuales. Suma un poco cuando la oferta publica banda salarial. El contador semanal y su objetivo se guardan en este navegador.</p>
+  <p><b>Prioridad y familia.</b> La tabla ordena por «prioridad»: el CV adaptado con un pequeño plus para las familias de IA y Data Science (GenAI/LLM, Machine Learning, Computer Vision, Data Science/Eng.) mientras te reorientas hacia ahí; Full Stack/Backend sigue en el radar, sólo pesa algo menos por defecto. Pulsa la columna «CV adaptado» en cualquier momento para ver el encaje puro, sin ese ajuste.</p>
   <p><b>Requisitos que no cubres.</b> Dentro de cada oferta, los huecos van clasificados por si merece la pena repasarlos antes de una posible entrevista: en verde, cuestión de días; en ámbar, varias semanas de dedicación real; en rojo, lo que no es realista cubrir en ese plazo (una titulación, un idioma nuevo, años de experiencia, una disciplina muy especializada) — ahí la idea no es estudiar de un día para otro, es tener lista una respuesta honesta. Esto es sólo información para ti: nunca se usa para tocar el CV, la carta o el correo, que nunca dicen que sabes algo que no sabes.</p>
   <p><b>Ámbito.</b> «España» es contrato y empresa aquí. «Internacional» son empresas de fuera que contratan en remoto y cuya restricción geográfica permite residir en España — está verificada oferta por oferta, pero conviene confirmarla en el primer contacto. «Navarra / Gipuzkoa» son las presenciales e híbridas dentro de tus provincias.</p>
   <p><b>Salarios.</b> En verde, el que publica la oferta. En ámbar, una estimación; abre la fila para ver de dónde sale cada una. Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España 2026 (Universidad VIU) y Levels.fyi por empresa. El mínimo está en 45 000 €, pero las que caen por publicar una cifra más baja ya no desaparecen: van a la pestaña «Filtradas», porque un filtro que no se puede auditar acaba costando ofertas buenas sin que te enteres.</p>
@@ -359,7 +385,8 @@ const CV = __CV__;
 const FILTRADAS = __FILTRADAS__;
 const EMBUDO = __EMBUDO__;
 const FAMILIA_ES = {genai:'GenAI / LLM', ml:'Machine Learning', cv:'Computer Vision',
-  ds:'Data Science / Eng.', mlops:'MLOps', backend:'Full Stack / Backend', research:'Investigación'};
+  ds:'Data Science / Eng.', mlops:'MLOps', backend:'Full Stack / Backend', research:'Investigación',
+  general:'General / Perfil abierto'};
 const FAMILIAS_FOCO = new Set(['genai','ml','cv','ds']);
 const COLS = [
  {k:'empresa', t:'Empresa'},
@@ -377,6 +404,9 @@ const COLS = [
  {k:'scoreAdap', t:'CV adaptado', num:true},
  {k:'mejora', t:'Mejora', num:true},
 ];
+/* «Foco» es el orden nuevo por defecto: la prioridad de siempre, castigada por
+   antigüedad de la oferta y por títulos de sénior/arquitecto, y premiada un poco
+   cuando la oferta publica banda. Ver pipeline/foco.py. */
 const FASES=['aplicada','respondida','entrevista','oferta','rechazada'];
 const FASE_ES={aplicada:'Aplicada',respondida:'Respondida',entrevista:'Entrevista',oferta:'Oferta recibida',rechazada:'Rechazada'};
 const NOV_ES={rechazo:'Rechazo',avance:'Avance',acuse:'Acuse de recibo'};
@@ -395,7 +425,8 @@ const CFG_DEF={
 const FUENTES_POS=["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Manfred","Himalayas","WeWorkRemotely","RemoteOK"];
 const AMBITOS_POS=["España","Internacional","Navarra / Gipuzkoa"];
 const NOV_CLS={rechazo:'p-nov-rechazo',avance:'p-nov-avance',acuse:'p-nov-acuse'};
-let sortK='prioridad', sortDir=-1, openId=null, vista='activa';
+let sortK='foco', sortDir=-1, openId=null, vista='hoy';
+const OBJ_DEF=10;   // candidaturas por semana; se cambia desde la pestaña «Hoy»
 let STATE={}, DOCS={}, CORREO={}, db=null, dbListo=false, dbFallo=false;
 let CFG=Object.assign({},CFG_DEF), cfgAbierta=false, cfgGuardando=false;
 let sampleNs=null, sampleTried=false;
@@ -829,6 +860,7 @@ function renderViews(){
   const activas = DATA.filter(r=>st(r.id).estado==='activa').length;
   const descartadas = DATA.filter(r=>st(r.id).estado==='descartada').length;
   document.getElementById('views').innerHTML = [
+    ['hoy','Hoy',Math.max(0, objetivo()-aplicadasDesde(lunes()))],
     ['activa','Activas',activas],['aplicada','Aplicadas',enCurso],
     ['respondida','Respondidas',respondidas],
     ['rechazada','Rechazadas',rechazadas],['descartada','Descartadas',descartadas],
@@ -844,14 +876,17 @@ function renderViews(){
 }
 /* Las dos vistas nuevas no son tablas de ofertas, así que se pintan aparte y
    se esconde la tabla principal en vez de forzarla a un formato que no es. */
-const vistaPanel = () => vista==='filtrada' || vista==='embudo';
+const vistaPanel = () => vista==='filtrada' || vista==='embudo' || vista==='hoy';
 
 function render(){
+  stats();
   renderViews();
   document.getElementById('tablawrap').hidden = vistaPanel();
   document.querySelector('.toolbar').hidden = vistaPanel();
   document.getElementById('panelFiltradas').hidden = vista!=='filtrada';
   document.getElementById('panelEmbudo').hidden = vista!=='embudo';
+  document.getElementById('panelHoy').hidden = vista!=='hoy';
+  if(vista==='hoy'){ renderHoy(); return; }
   if(vista==='filtrada'){ renderFiltradas(); return; }
   if(vista==='embudo'){ renderEmbudo(); return; }
   renderHead();
@@ -1129,27 +1164,33 @@ function pdfDoc(r, kind, texto){
 const PX = 0.75;                      // 1 px CSS = 0.75 pt
 const CV_ANCHO = 595.28, CV_ALTO = 841.89;
 const CV_PADX = 34.02, CV_PADY = 25.51;   // 12 mm / 9 mm
-const CV_LH = 1.26;
+const CV_LH = 1.36;   // más aire entre líneas: el CV corto ya no necesita apretar
 
 function cvBloques(r, FS){
   const idi = r.idioma==='en' ? 'en' : 'es';
   const L  = CV.labels[idi];
   const B  = idi==='en' ? CV.bullets_en : CV.bullets_es;
-  const SK = idi==='en' ? CV.skills_en  : CV.skills_es;
+  const SK_ALL = idi==='en' ? CV.skills_en  : CV.skills_es;
   const fam = CV.orden[r.familia] ? r.familia : 'backend';
   const oo = CV.orden[fam][0], vv = CV.orden[fam][1];
+  const skCfg = CV.orden_skills[fam];
+  const SK = SK_ALL[skCfg.variante];
+  const tfmB = B[CV.tfm_variant[fam] || 'M1a'];
+  const tfgB = B[CV.tfg_variant[fam] || 'G1a'];
   const nombre = idi==='en' ? CV.contacto.nombre_en : CV.contacto.nombre_es;
   const ciudad = idi==='en' ? CV.contacto.ciudad_en : CV.contacto.ciudad_es;
   const bl=[];
-  const h2 = t => bl.push({s:t, size:9.2, f:'TB', mt:7*PX, mb:3*PX, tc:0.08*9.2,
+  const h2 = t => bl.push({s:t, size:9.4, f:'TB', mt:9*PX, mb:3.5*PX, tc:0.08*9.4,
                            regla:{pt:1.5*PX, rgb:[0.60,0.60,0.60], ancho:0.6}});
   const jt = (t,size) => bl.push({s:t, size:size||9.7, f:'TB', mt:4*PX});
   const jl = t => bl.push({s:t, size:8.8, f:'TI', mb:3*PX, rgb:[0.33,0.33,0.33]});
 
   bl.push({s:nombre, size:15.5, f:'TB', mb:1*PX});
   bl.push({s:r.titular, size:10.4, f:'TR', mb:3*PX});
-  bl.push({s:[ciudad,CV.contacto.tel,CV.contacto.email,CV.contacto.linkedin].join(' · '),
-           size:8.5, f:'TR', mb:6*PX, regla:{pt:5*PX, rgb:[0.73,0.73,0.73], ancho:0.75}});
+  const contacto = [ciudad,CV.contacto.tel,CV.contacto.email,CV.contacto.linkedin];
+  if(CV.contacto.github) contacto.push(CV.contacto.github);   // vacío hasta que haya repos que enseñar
+  bl.push({s:contacto.join(' · '),
+           size:8.7, f:'TR', mb:6*PX, regla:{pt:5*PX, rgb:[0.73,0.73,0.73], ancho:0.75}});
 
   h2(L.resumen);
   bl.push({s:r.resumen, size:FS, f:'TR', mb:3.5*PX, just:true});
@@ -1162,14 +1203,20 @@ function cvBloques(r, FS){
 
   h2(L.form);
   jt(L.m_tit); jl(L.m_sub);
-  bl.push({s:L.m_tfm, size:8.8, f:'TR', mb:3.5*PX, just:true});
+  /* Si el bullet de logro ya nombra la tesis, la línea del título sobra: decía
+     dos veces lo mismo y se comía una línea de cada dos. Se mira sobre el texto
+     del propio bullet para que siga valiendo si algún día se reescribe. */
+  const nombraTesis = t => /\bTFM\b|\bTFG\b|Trabajo de Fin|Master'?s Thesis|Bachelor'?s Thesis/i.test(t||'');
+  if(!nombraTesis(tfmB)) bl.push({s:L.m_tfm, size:8.8, f:'TR', mb:1.5*PX, just:true});
+  bl.push({items:[tfmB], size:8.8, f:'TR', mb:3.5*PX, just:true});
   jt(L.g_tit); jl(L.g_sub);
-  bl.push({s:L.g_tfg, size:8.8, f:'TR', mb:3.5*PX, just:true});
+  if(!nombraTesis(tfgB)) bl.push({s:L.g_tfg, size:8.8, f:'TR', mb:1.5*PX, just:true});
+  bl.push({items:[tfgB], size:8.8, f:'TR', mb:3.5*PX, just:true});
   jt(L.compl, 9.4);
   bl.push({items:L.compl_items, size:8.8, f:'TR', mt:0, mb:3*PX});
 
   h2(L.skills);
-  for(const s of CV.orden_skills[fam]) bl.push({s:SK[s], size:FS, f:'TR', mb:2*PX});
+  for(const s of skCfg.orden) bl.push({s:SK[s], size:FS, f:'TR', mb:2*PX});
 
   h2(L.lid);
   bl.push({s:L.lid_txt, size:FS, f:'TR', mb:3.5*PX, just:true});
@@ -1222,7 +1269,7 @@ function cvDisponer(bl, medir){
 function pdfCV(r){
   const util = CV_ALTO-2*CV_PADY;
   let FS = 8.1;
-  for(const fs of [9.6,9.3,9.0,8.7,8.4,8.1]){
+  for(const fs of [10.5,10.2,9.9,9.6,9.3,9.0,8.7,8.4,8.1]){
     if(cvDisponer(cvBloques(r,fs),true).alto <= util){ FS=fs; break; }
   }
   return construirPdf([cvDisponer(cvBloques(r,FS),false).items], CV_ANCHO, CV_ALTO);
@@ -1286,6 +1333,97 @@ function renderFiltradas(){
   </div>`;
 }
 
+
+/* ---------- «Hoy»: la cola de candidaturas ----------
+   El cuello de botella medido el 10 sep 2026 no era encontrar ofertas (222 en el
+   radar) sino mandarlas: 188 no se habían tocado nunca y salían 1,7 candidaturas
+   al día. Esta pestaña existe para convertir el radar en una cola corta: seis
+   ofertas, en orden de foco, con los botones al lado y un contador semanal. */
+const COLA_N = 6, DIAS_VIVA = 21;
+
+function colaHoy(){
+  const suelo = +CFG.salario_min || 0;      // ni siquiera el techo de la banda llega: fuera de la cola
+  return DATA.filter(r => st(r.id).estado==='activa'
+                       && (r.dias==null || r.dias<=DIAS_VIVA)
+                       && !(suelo && r.salMax < suelo))
+             .sort((a,b)=>b.foco-a.foco);
+}
+function objetivo(){
+  const v=parseInt(localStorage.getItem('radar-objetivo'),10);
+  return (v>0 && v<100) ? v : OBJ_DEF;
+}
+function lunes(){
+  const d=new Date(); const n=(d.getDay()+6)%7;      // 0 = lunes
+  d.setDate(d.getDate()-n); return d.toISOString().slice(0,10);
+}
+function aplicadasDesde(desde){
+  return Object.values(STATE).filter(s=>s.estado==='aplicada' && (s.fechaAplicacion||'')>=desde).length;
+}
+function pillDias(d){
+  if(d==null) return '';
+  const cls = d<=7 ? 'p-dias-ok' : d<=14 ? 'p-dias-tibio' : 'p-dias-frio';
+  return `<span class="pill ${cls}">${d===0?'hoy':'hace '+d+' d'}</span>`;
+}
+
+function tarjetaHoy(r){
+  const hueco = (r.huecos||[])[0];
+  return `<div class="tarjeta">
+    <div>
+      <div class="co">${esc(r.empresa)}</div>
+      <div class="pt">${esc(r.puesto)}</div>
+    </div>
+    <div class="meta">
+      ${pillDias(r.dias)}
+      <span class="pill ${FAMILIAS_FOCO.has(r.familia)?'p-fam-foco':'p-fam-otro'}">${esc(FAMILIA_ES[r.familia]||r.familia)}</span>
+      <span class="pill ${r.salOrigen==='publicado'?'p-pub':'p-est'}">${eur(r.salMedio)}</span>
+      <span class="pill ${r.ambito==='Internacional'?'p-int':'p-es'}">${esc(r.ambito)}</span>
+    </div>
+    <p class="por">${hueco ? 'Hueco principal: <b>'+esc(hueco)+'</b>.' : 'Cubres todos los requisitos que pide.'}${r.motivoFoco ? ' '+esc(r.motivoFoco.charAt(0).toUpperCase()+r.motivoFoco.slice(1))+'.' : ''}</p>
+    <div class="acc">
+      <a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Abrir oferta</a>
+      <button class="btn" data-cv="${r.id}">CV</button>
+      <button class="btn" data-ficha="${r.id}">Ficha</button>
+      <button class="btn" data-apply="${r.id}">Aplicada</button>
+      <button class="xbtn" data-discard="${r.id}" title="Descartar">✕</button>
+    </div>
+  </div>`;
+}
+
+function renderHoy(){
+  const cont=document.getElementById('panelHoy');
+  const cola=colaHoy(), obj=objetivo();
+  const semana=aplicadasDesde(lunes()), total=Object.values(STATE).filter(s=>s.estado==='aplicada').length;
+  const pct=Math.min(100, Math.round(100*semana/obj));
+  const t=EMBUDO.total||{};
+  const tasa = (t.tasa_respuesta==null) ? '—' : t.tasa_respuesta.toFixed(0)+' %';
+  const caducadas=DATA.filter(r=>st(r.id).estado==='activa' && r.dias!=null && r.dias>DIAS_VIVA).length;
+  const cuerpo = cola.length
+    ? `<div class="hoygrid">${cola.slice(0,COLA_N).map(tarjetaHoy).join('')}</div>
+       <p class="hint">${cola.length} ofertas activas con menos de ${DIAS_VIVA} días. Cuando despaches estas seis, entran las seis siguientes.${caducadas?' Además hay '+caducadas+' que pasan de tres semanas: casi todas estarán cerradas, y conviene descartarlas en bloque.':''}</p>`
+    : `<div class="vacio"><p>No queda ninguna oferta activa reciente. Repasa las «Activas» antiguas o espera a la cosecha de mañana.</p></div>`;
+  cont.innerHTML=`<div class="panel">
+    <h3>Hoy</h3>
+    <p class="lede">Seis ofertas, en orden de foco, con todo lo necesario para echarlas sin salir de aquí. El foco es la prioridad de siempre menos lo que ya sabes que no llega: ofertas viejas y títulos de sénior o arquitecto. Encontrar ofertas no es el problema; mandarlas, sí.</p>
+    <div class="ritmo">
+      <div class="col"><span class="et">Esta semana</span><span class="cifra">${semana} / ${obj}</span>
+        <span class="barra"><i style="width:${pct}%"></i></span></div>
+      <div class="col"><span class="et">Objetivo semanal</span>
+        <input class="objin" id="objsem" type="number" min="1" max="99" value="${obj}"></div>
+      <div class="col"><span class="et">Candidaturas totales</span><span class="cifra">${total}</span></div>
+      <div class="col"><span class="et">Tasa de respuesta</span><span class="cifra">${tasa}</span></div>
+    </div>
+    ${cuerpo}
+  </div>`;
+  const inp=document.getElementById('objsem');
+  if(inp) inp.onchange=()=>{ try{ localStorage.setItem('radar-objetivo', String(parseInt(inp.value,10)||OBJ_DEF)); }catch(e){} render(); };
+  document.querySelectorAll('[data-ficha]').forEach(b=>b.onclick=()=>{
+    vista='activa'; openId=b.dataset.ficha; render();
+    const tr=document.querySelector(`tr.r[data-id="${openId}"]`);
+    if(tr) tr.scrollIntoView({block:'center'});
+  });
+  bind();
+}
+
 /* El embudo. La pregunta que el radar no se hacía: ¿esto convierte? */
 function renderEmbudo(){
   const cont=document.getElementById('panelEmbudo');
@@ -1340,6 +1478,7 @@ function stats(){
    ['Portales',''+new Set(DATA.map(r=>r.fuente)).size,'LinkedIn, InfoJobs, Tecnoempleo, Indeed y portales remotos'],
    ['Salario medio',eur(med),'mín. filtrado: 45 000 €'],
    ['Filtradas',''+FILTRADAS.length,'apartadas por salario o modalidad sin confirmar'],
+   ['Sin tocar',''+DATA.filter(r=>st(r.id).estado==='activa').length,'activas a las que aún no has aplicado ni descartado'],
    ['Mejor encaje',best.scoreAdap.toFixed(1)+' %',best.empresa],
    ['Ganancia media','+'+dlt.toFixed(1)+' pp','del CV adaptado sobre el original'],
   ].map(([k,v,n2])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${esc(n2)}</div></div>`).join('');
@@ -1363,7 +1502,7 @@ document.getElementById('ffue').insertAdjacentHTML('beforeend',
 document.getElementById('ffam').insertAdjacentHTML('beforeend',
   [...new Set(DATA.map(r=>r.familia))].sort((a,b)=>(FAMILIA_ES[a]||a).localeCompare(FAMILIA_ES[b]||b,'es'))
     .map(f=>`<option value="${esc(f)}">${esc(FAMILIA_ES[f]||f)}</option>`).join(''));
-stats(); render(); initEstado();
+render(); initEstado();
 </script>"""
 
 import datetime

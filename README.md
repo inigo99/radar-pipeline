@@ -42,10 +42,14 @@ playwright ni poppler.
 | Script | Entrada | Salida |
 |---|---|---|
 | `preparar_datos.py` | snapshot o volcado de la BD | los JSON de `data/` |
-| `puntuar.py` | ofertas, perfil | `data/resultado.json` con la puntuación original y adaptada |
+| `puntuar.py` | ofertas, perfil | `data/resultado.json` con la puntuación original, la adaptada y el foco |
+| `foco.py` | una oferta y su prioridad | el orden «foco»: prioridad menos antigüedad y menos títulos de sénior |
 | `embudo.py` | estado, correo, resultado | `data/embudo.json`: conversión por fuente, familia y tramo |
 | `dashboard.py` | resultado, perfil, tailor, filtradas, embudo | `out/dashboard.html`, la página completa |
 | `exportar_snapshot.py` | todo `data/` | `out/snapshot.json`, que se sube a `pipeline/snapshot` |
+
+`embudo.py` **no es opcional**: si no se ejecuta, `data/embudo.json` no existe y la
+pestaña «Embudo» del dashboard sale vacía aunque haya candidaturas registradas.
 
 `datos.py` es el único punto de carga; `ofertas.py`, `tailor.py`, `base_cv.py` y
 `perfil.py` son envoltorios finos sobre él.

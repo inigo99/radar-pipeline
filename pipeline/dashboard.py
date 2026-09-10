@@ -53,6 +53,13 @@ from experiencia import anios_perfil, MARGEN_DEF
 # Los años de experiencia del CV, sumados de las fechas de sus puestos. Se
 # recalculan en cada ejecución, así que la cifra sube sola con el tiempo.
 ANIOS_PERFIL = anios_perfil(_PERFIL_DOC)
+
+# El linter del CV base. Corre aquí y no como un paso más de la tarea diaria
+# porque no necesita ningún dato que no esté ya cargado: `perfil/base` y nada
+# más. Así no hay fichero nuevo en `data/` ni paso nuevo que se pueda olvidar.
+from lint import informe as _informe_lint
+LINT = _informe_lint(_PERFIL_DOC)
+LINT_JS = json.dumps(LINT, ensure_ascii=False, separators=(',', ':'))
 _pl = dict(PERFIL_LLM)
 _pl["tel"], _pl["email"], _pl["linkedin"] = CONTACTO["tel"], CONTACTO["email"], CONTACTO["linkedin"]
 _pl["experiencia"] = [
@@ -291,6 +298,28 @@ td{padding:11px 10px;vertical-align:top}
 .pill.p-mot-ambito{background:var(--crit-bg);color:var(--crit)}
 .pill.p-mot-otro{background:var(--meter-track);color:var(--ink-2)}
 .pill.p-mot-experiencia{background:var(--warn-bg);color:var(--warn)}
+.pill.p-mot-duplicada{background:var(--meter-track);color:var(--ink-2)}
+.pill.p-lint-error{background:var(--crit-bg);color:var(--crit)}
+.pill.p-lint-aviso{background:var(--warn-bg);color:var(--warn)}
+.pill.p-lint-info{background:var(--meter-track);color:var(--ink-2)}
+.lintlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.lintlist li{display:grid;grid-template-columns:92px 1fr;gap:12px;align-items:start;
+  padding:11px 2px;border-bottom:1px solid var(--line-soft)}
+.lintlist li:last-child{border-bottom:0}
+.lintlist .msg{font-weight:600;color:var(--ink)}
+.lintlist .det{font-size:12.5px;color:var(--ink-2);margin-top:3px;line-height:1.5}
+.lintlist .cod{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;
+  color:var(--ink-3);margin-top:4px}
+.tally{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.tally .t{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;
+  padding:9px 12px;min-width:132px}
+.tally .t b{display:block;font-size:19px;line-height:1.2;font-variant-numeric:tabular-nums}
+.tally .t span{font-size:12px;color:var(--ink-2)}
+.formas{margin:0 0 16px;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.formas li{display:grid;grid-template-columns:44px 90px 1fr;gap:10px;align-items:center;font-size:13px}
+.formas .barra{display:block}
+.formas .n{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.formas .q{color:var(--ink-2)}
 .pill.p-exp-justo{background:var(--warn-bg);color:var(--warn)}
 .pill.p-exp-lejos{background:var(--crit-bg);color:var(--crit)}
 .barra{height:7px;border-radius:4px;background:var(--meter-track);overflow:hidden;min-width:70px}
@@ -379,6 +408,7 @@ footer b{color:var(--ink-2);font-weight:600}
 <div id="panelHoy" hidden></div>
 <div id="panelFiltradas" hidden></div>
 <div id="panelEmbudo" hidden></div>
+<div id="panelLint" hidden></div>
 
 <footer>
   <p><b>Cómo se calcula la coincidencia.</b> Cada oferta tiene sus requisitos con un peso según la importancia que les da el anuncio. Un requisito puntúa 1,0 si está demostrado en un bullet o en el resumen del CV, 0,5 si sólo aparece en la lista de competencias técnicas, y 0 si no lo tienes. La columna «adaptado» aplica lo mismo al CV generado para esa oferta: la mejora sale sólo de sacar a un bullet algo que ya sabes hacer. Ningún requisito que no cumplas sube de 0.</p>
@@ -386,6 +416,8 @@ footer b{color:var(--ink-2);font-weight:600}
   <p><b>Prioridad y familia.</b> La tabla ordena por «prioridad»: el CV adaptado con un pequeño plus para las familias de IA y Data Science (GenAI/LLM, Machine Learning, Computer Vision, Data Science/Eng.) mientras te reorientas hacia ahí; Full Stack/Backend sigue en el radar, sólo pesa algo menos por defecto. Pulsa la columna «CV adaptado» en cualquier momento para ver el encaje puro, sin ese ajuste.</p>
   <p><b>Años de experiencia.</b> Cada oferta lleva los años que exige el anuncio, cuando los dice. Tu CV suma los suyos solo, de las fechas de tus puestos, así que la cifra sube con el tiempo sin tocar nada. Lo que pida más de lo que tienes sale de la cola y se va a «Filtradas», separando lo que se te escapa <em>por poco</em> —dentro del margen que fijes— de lo que queda <em>lejos</em>. Nunca se borra nada, y una oferta que ya hayas aplicado o descartado no se esconde jamás. Las que no dicen años, que son la mayoría, pasan sin más: la falta de dato no aparta a nadie. Los dos números, tus años y el margen, se cambian desde «Configuración» y se aplican al momento, sin esperar a la ejecución de mañana.</p>
   <p><b>Requisitos que no cubres.</b> Dentro de cada oferta, los huecos van clasificados por si merece la pena repasarlos antes de una posible entrevista: en verde, cuestión de días; en ámbar, varias semanas de dedicación real; en rojo, lo que no es realista cubrir en ese plazo (una titulación, un idioma nuevo, años de experiencia, una disciplina muy especializada) — ahí la idea no es estudiar de un día para otro, es tener lista una respuesta honesta. Esto es sólo información para ti: nunca se usa para tocar el CV, la carta o el correo, que nunca dicen que sabes algo que no sabes.</p>
+  <p><b>Tu CV.</b> La pestaña «Tu CV» es la única que no mira ofertas: revisa el perfil base contra lo que un reclutador nota en la primera pasada —cronología, huecos sin explicar, logros sin cifra, lenguaje de funciones, frases de relleno— y comprueba además que el modelo de evidencia siga siendo verdad: que lo marcado como demostrado aparezca de verdad en algún logro, y que ningún techo prometa más de lo que la evidencia permite. Arreglar algo aquí mejora todas las candidaturas a la vez, no una. No hay ninguna regla cultural: si un CV lleva foto o fecha de nacimiento depende del país.</p>
+  <p><b>Los borradores se revisan solos.</b> La carta y el correo pasan por un validador antes de que los leas: cifras que no salen ni de tu CV ni de la oferta, tecnologías que no tienes, años por encima de los tuyos dichos como propios y fórmulas de plantilla que están prohibidas en tus reglas de estilo. No bloquea nada —nombrar un hueco es correcto, y citar la banda de la oferta también—, sólo señala la frase. Es el equivalente para los textos del candado que ya protegía el CV.</p>
   <p><b>Ámbito.</b> «España» es contrato y empresa aquí. «Internacional» son empresas de fuera que contratan en remoto y cuya restricción geográfica permite residir en España — está verificada oferta por oferta, pero conviene confirmarla en el primer contacto. «Navarra / Gipuzkoa» son las presenciales e híbridas dentro de tus provincias.</p>
   <p><b>Salarios.</b> En verde, el que publica la oferta. En ámbar, una estimación; abre la fila para ver de dónde sale cada una. Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España 2026 (Universidad VIU) y Levels.fyi por empresa. El mínimo está en 45 000 €, pero las que caen por publicar una cifra más baja ya no desaparecen: van a la pestaña «Filtradas», porque un filtro que no se puede auditar acaba costando ofertas buenas sin que te enteres.</p>
   <p><b>Modalidad.</b> Se decide con la frase literal de la descripción, no con la etiqueta del portal, que miente a menudo. Cuando el portal la marca remota y la descripción no dice nada que lo contradiga, la oferta entra igual pero marcada como <em>remoto sin confirmar</em>: es una llamada de treinta segundos, no un motivo para tirarla.</p>
@@ -403,6 +435,8 @@ const FILTRADAS = __FILTRADAS__;
 const EMBUDO = __EMBUDO__;
 const ANIOS_PERFIL = __ANIOS_PERFIL__;   // años de experiencia sumados de su CV
 const MARGEN_DEF = __MARGEN_DEF__;
+const LINT = __LINT__;                   // banderas rojas del CV base (pipeline/lint.py)
+const EVIDENCIA = __EVIDENCIA__;         // término -> 0 / 0.5 / 1.0, para validar lo generado
 const FAMILIA_ES = {genai:'GenAI / LLM', ml:'Machine Learning', cv:'Computer Vision',
   ds:'Data Science / Eng.', mlops:'MLOps', backend:'Full Stack / Backend', research:'Investigación',
   general:'General / Perfil abierto'};
@@ -782,7 +816,7 @@ function panelDoc(r, kind){
   const guardado = (DOCS[r.id]||{})[kind];
   if(guardado && guardado.texto){
     const f = guardado.generado ? new Date(guardado.generado).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
-    return `<div class="letter">${esc(guardado.texto)}</div>
+    return `${avisosHTML(validaTexto(guardado.texto, r, kind))}<div class="letter">${esc(guardado.texto)}</div>
       <div class="actions" style="margin-top:10px">
         <button class="btn" data-copy="${kind}" data-id="${r.id}">Copiar</button>
         <button class="btn" data-dlpdf="${kind}" data-id="${r.id}">Descargar PDF</button>
@@ -848,6 +882,118 @@ ${ofertaTxt(r)}
 TAREA: ${tarea}`;
 }
 
+/* ---------- El validador de lo que escribe Claude ----------
+   El candado de `perfil.py` protege el CV: un término con evidencia 0 nunca
+   sube, pase lo que pase. La carta y el correo no tenían nada equivalente —los
+   sostenía sólo el prompt—, y un prompt se cumple casi siempre, que no es lo
+   mismo que siempre. Esto es el «casi».
+
+   Cuatro comprobaciones mecánicas sobre el texto ya escrito, comparándolo con
+   el perfil real y con la oferta. No bloquean nada: avisan y señalan la frase,
+   porque el que envía eres tú y hay casos legítimos —nombrar un hueco es lo
+   que pide el prompt, y citar la banda de la oferta también.
+
+   Se ejecuta al generar Y al volver a abrir un texto guardado, para que los
+   borradores de antes de esto también pasen por aquí. */
+
+let _NUMS_PERFIL = null;
+const _plano = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const _canonNum = s => String(s).replace(/[.,\s ]/g,'').replace(/^0+(?=\d)/,'');
+
+function numerosPermitidos(r){
+  if(!_NUMS_PERFIL){
+    _NUMS_PERFIL = new Set((JSON.stringify(PERFIL).match(/\d[\d.,]*/g)||[]).map(_canonNum));
+    const a = Math.round(ANIOS_PERFIL), hoy = new Date().getFullYear();
+    [ANIOS_PERFIL, a, a+1, hoy, hoy+1].forEach(n=>_NUMS_PERFIL.add(_canonNum(String(n))));
+  }
+  // Lo que la oferta le dio de contexto es material legítimo: su banda
+  // salarial, los años que pide, las cifras de sus propios requisitos.
+  const n = new Set(_NUMS_PERFIL);
+  (String(ofertaTxt(r)).match(/\d[\d.,]*/g)||[]).forEach(x=>n.add(_canonNum(x)));
+  return n;
+}
+
+/* Los términos que NO tiene. Buscar lo ausente es mucho más fiable que
+   intentar reconocer toda la tecnología que pueda aparecer en un texto. */
+function terminosSinEvidencia(){
+  return Object.keys(EVIDENCIA||{}).filter(t=>(EVIDENCIA[t]||0)===0 && _plano(t).length>=3);
+}
+
+const PROHIBIDAS = [
+  'sinergia','valor añadido','valor anadido','no dudes en','no dude en',
+  'apasionado por','apasionada por','altamente motivad','encaje perfecto',
+  'a quien corresponda','estimado/a','muy señores míos','quedo a la espera de su respuesta',
+  'dear sir or madam','to whom it may concern','results-driven','team player'
+];
+
+function validaTexto(texto, r, kind){
+  const avisos=[];
+  if(!texto) return avisos;
+  const t = String(texto);
+
+  // 1. Tecnología que no está en su perfil.
+  for(const term of terminosSinEvidencia()){
+    const legible = term.replace(/_/g,'[ _-]?');
+    const re = new RegExp('\\b'+legible+'\\b','i');
+    if(re.test(t)){
+      avisos.push({nivel:'aviso', mensaje:`«${term.replace(/_/g,' ')}» no está en tu perfil.`,
+        detalle:'Nombrarlo como hueco es correcto y es lo que pide el prompt. Lo que no puede es sonar a que lo sabes.'});
+    }
+  }
+
+  // 2. Cifras que no salen ni de tu perfil ni de la oferta.
+  const permitidos = numerosPermitidos(r);
+  const inventadas = [...new Set((t.match(/\d[\d.,]*/g)||[])
+    .filter(x=>{ const c=_canonNum(x); return c && +c>3 && !permitidos.has(c); }))];
+  if(inventadas.length){
+    avisos.push({nivel:'error', mensaje:`Cifras que no están ni en tu CV ni en la oferta: ${inventadas.slice(0,6).join(', ')}.`,
+      detalle:'Los modelos redondean: un 38 % se convierte en 40 % sin querer, y esa es la cifra que te preguntan en la entrevista.'});
+  }
+
+  // 3. Años de experiencia por encima de los tuyos, dichos como propios.
+  const mios = Math.max(aniosMios(), ANIOS_PERFIL);
+  const reAnios = /(\d{1,2})\s*\+?\s*(?:años|anos|years)/gi;
+  let m;
+  while((m = reAnios.exec(t))){
+    const n = +m[1];
+    if(n <= Math.ceil(mios)) continue;
+    const contexto = t.slice(Math.max(0,m.index-70), m.index+40).toLowerCase();
+    // «pedís 5 años» o «la oferta pide 5 años» no es una afirmación sobre él.
+    if(/\b(pide|piden|ped[ií]s|requiere|requer[ií]s|busc[aá]is|solicit[aá]is|exig[eí]s|requires|asking for|you ask)\b/.test(contexto)) continue;
+    avisos.push({nivel:'error', mensaje:`Dice «${m[0]}» y tu CV suma ${mios}.`,
+      detalle:'Si es la exigencia de la oferta, hay que dejar claro que hablas de ellos, no de ti.'});
+  }
+
+  // 4. Fórmulas que él no usa nunca. Su propio perfil de voz, comprobado.
+  const bajo = t.toLowerCase();
+  const malas = PROHIBIDAS.filter(p=>bajo.includes(p));
+  if(malas.length){
+    avisos.push({nivel:'aviso', mensaje:`Suena a plantilla: «${malas.slice(0,3).join('», «')}».`,
+      detalle:'Está en tus reglas de estilo, así que si ha salido es que el modelo se ha ido a la carta modelo.'});
+  }
+
+  // 5. Comprobaciones de formato, distintas según el documento.
+  if(!new RegExp('\\b'+String(r.empresa||'').split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(t)){
+    avisos.push({nivel:'aviso', mensaje:'No nombra a la empresa en ningún sitio.',
+      detalle:'Una carta que vale para cualquier empresa se lee como lo que es.'});
+  }
+  if(kind==='mail'){
+    if(!/^(asunto|subject)\s*:/i.test(t.trim()))
+      avisos.push({nivel:'aviso', mensaje:'El correo no empieza por una línea de asunto.', detalle:''});
+    if(!t.includes('[nombre]'))
+      avisos.push({nivel:'info', mensaje:'No lleva el marcador [nombre] del saludo.',
+        detalle:'Si no sabes quién lo lee, borra el nombre y deja el saludo a secas.'});
+  }
+  return avisos;
+}
+
+function avisosHTML(avisos){
+  if(!avisos || !avisos.length) return '';
+  const filas=avisos.map(a=>`<li><span class="pill p-lint-${a.nivel==='error'?'error':(a.nivel==='info'?'info':'aviso')}">${a.nivel==='error'?'Revisa':(a.nivel==='info'?'Apunte':'Ojo')}</span>
+    <div><div class="msg">${esc(a.mensaje)}</div>${a.detalle?`<div class="det">${esc(a.detalle)}</div>`:''}</div></li>`).join('');
+  return `<ul class="lintlist" style="margin-bottom:10px">${filas}</ul>`;
+}
+
 async function generar(id, kind){
   const r=DATA.find(x=>x.id===id); if(!r) return;
   if(!sampleTried){ sampleTried=true; try{ sampleNs = await claude.use('sample'); }catch(e){ sampleNs=null; } }
@@ -890,7 +1036,8 @@ function renderViews(){
     ['respondida','Respondidas',respondidas],
     ['rechazada','Rechazadas',rechazadas],['descartada','Descartadas',descartadas],
     ['filtrada','Filtradas',FILTRADAS.length+apartadas().length],
-    ['embudo','Embudo',(EMBUDO.total||{}).candidaturas||0]
+    ['embudo','Embudo',(EMBUDO.total||{}).candidaturas||0],
+    ['lint','Tu CV',((LINT.cuenta||{}).error||0)+((LINT.cuenta||{}).aviso||0)]
   ].map(([v,t,c])=>`<button class="view ${vista===v?'on':''}" data-view="${v}">${t}<span class="n">${c}</span></button>`).join('');
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
     if(vista===b.dataset.view) return;
@@ -901,7 +1048,7 @@ function renderViews(){
 }
 /* Las dos vistas nuevas no son tablas de ofertas, así que se pintan aparte y
    se esconde la tabla principal en vez de forzarla a un formato que no es. */
-const vistaPanel = () => vista==='filtrada' || vista==='embudo' || vista==='hoy';
+const vistaPanel = () => vista==='filtrada' || vista==='embudo' || vista==='hoy' || vista==='lint';
 
 function render(){
   stats();
@@ -911,9 +1058,11 @@ function render(){
   document.getElementById('panelFiltradas').hidden = vista!=='filtrada';
   document.getElementById('panelEmbudo').hidden = vista!=='embudo';
   document.getElementById('panelHoy').hidden = vista!=='hoy';
+  document.getElementById('panelLint').hidden = vista!=='lint';
   if(vista==='hoy'){ renderHoy(); return; }
   if(vista==='filtrada'){ renderFiltradas(); return; }
   if(vista==='embudo'){ renderEmbudo(); return; }
+  if(vista==='lint'){ renderLint(); return; }
   renderHead();
   const rows = filtered();
   document.getElementById('count').textContent = `${rows.length} de ${DATA.length}`;
@@ -1330,8 +1479,8 @@ let tt;
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('on');
   clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),3200); }
 
-const MOT_CLS={salario:'p-mot-salario',modalidad:'p-mot-modalidad',ambito:'p-mot-ambito',experiencia:'p-mot-experiencia'};
-const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experiencia:'Experiencia',otro:'Otro'};
+const MOT_CLS={salario:'p-mot-salario',modalidad:'p-mot-modalidad',ambito:'p-mot-ambito',experiencia:'p-mot-experiencia',duplicada:'p-mot-duplicada'};
+const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experiencia:'Experiencia',duplicada:'Duplicada',otro:'Otro'};
 
 /* Lo que el filtro aparta. Existe porque un descarte silencioso no se puede
    discutir: si el mínimo de salario o los años están mal puestos, aquí se ve.
@@ -1394,9 +1543,95 @@ function renderFiltradas(){
   cont.innerHTML=`<div class="panel">
     <h3>Filtradas</h3>
     <p class="lede">Lo que el filtro aparta, a la vista. No es una lista de descartes definitivos: es lo que te está costando la configuración actual, para que puedas cambiarla sabiendo qué te deja fuera.</p>
-    ${exp}${ing}
+    ${recuentoDescartes()}${exp}${ing}
   </div>`;
   bind();
+}
+
+/* ---------- El recuento: qué filtro se está comiendo la ingesta ----------
+   La lista de abajo dice qué se apartó; esto dice CUÁNTO y por qué, que es
+   otra pregunta. Un filtro mal puesto no se nota leyendo cincuenta filas: se
+   nota viendo que el 70 % de lo que llega cae por la misma razón.
+
+   Los motivos se agrupan por su FORMA, no por su texto: «publica 38 000 €» y
+   «publica 41 500 €» son el mismo problema, así que las cifras se sustituyen
+   por N antes de contar. Es lo que hace `filters.explain()` en el repo
+   genérico, y es lo que convierte cincuenta motivos distintos en cuatro. */
+function formaMotivo(t){
+  return String(t||'').split(' (')[0]
+    .replace(/\d[\d.,]*(?:[\s ]\d{3})*/g,'N').replace(/\s+/g,' ').trim().slice(0,90) || '(sin detalle)';
+}
+
+function recuentoDescartes(){
+  const exp = apartadas().length;
+  const total = DATA.length + FILTRADAS.length;      // todo lo que llegó a mirarse
+  if(!total) return '';
+  const porMotivo={};
+  FILTRADAS.forEach(f=>{ const m=f.motivo||'otro'; porMotivo[m]=(porMotivo[m]||0)+1; });
+  if(exp) porMotivo.experiencia=(porMotivo.experiencia||0)+exp;
+
+  const pct = n => total ? Math.round(1000*n/total)/10 : 0;
+  const tiles = Object.entries(porMotivo).sort((a,b)=>b[1]-a[1]).map(([m,n])=>
+    `<div class="t"><b>${n}</b><span>${esc(MOT_ES[m]||m)} · ${pct(n)} % de la ingesta</span></div>`).join('');
+  if(!tiles) return '';
+
+  const formas={};
+  FILTRADAS.forEach(f=>{ const k=formaMotivo(f.detalle||MOT_ES[f.motivo]||'otro');
+                         formas[k]=(formas[k]||0)+1; });
+  const orden=Object.entries(formas).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const mayor=orden.length?orden[0][1]:1;
+  const lista=orden.map(([k,n])=>`<li>
+      <span class="n">${n}</span>
+      <span class="barra"><i style="width:${Math.round(100*n/mayor)}%"></i></span>
+      <span class="q">${esc(k)}</span>
+    </li>`).join('');
+
+  const top=Object.entries(porMotivo).sort((a,b)=>b[1]-a[1])[0];
+  const aviso = top && pct(top[1])>=40
+    ? `<p class="lede" style="margin-bottom:12px"><b>${esc(MOT_ES[top[0]]||top[0])}</b> se está llevando el ${pct(top[1])} % de todo lo que llega. Si eso no es lo que quieres, ese es el filtro que hay que tocar, no los demás.</p>`
+    : '';
+
+  return `<h4>Cuánto aparta cada filtro</h4>
+    <p class="lede" style="margin-bottom:12px">Sobre ${total} ofertas miradas: las ${DATA.length} que entraron y las ${FILTRADAS.length} que se pararon al buscarlas, más las ${exp} que se apartan por años. Los porcentajes son de ese total.</p>
+    <div class="tally">${tiles}</div>
+    ${aviso}
+    ${lista?`<p class="lede" style="margin-bottom:8px">Las razones concretas más repetidas, con las cifras sustituidas por <b>N</b> para poder agruparlas:</p><ul class="formas">${lista}</ul>`:''}`;
+}
+
+/* ---------- El CV base: lo que ve un reclutador en diez segundos ----------
+   Todo lo demás de la página juzga ofertas. Esto juzga tu perfil, que es la
+   única pieza con efecto multiplicativo: un logro sin cifra arreglado mejora
+   las doscientas candidaturas a la vez. Los hallazgos los calcula
+   `pipeline/lint.py` al generar la página, sobre `perfil/base`. */
+const LINT_ES={error:'Error',aviso:'Aviso',info:'Apunte'};
+
+function renderLint(){
+  const cont=document.getElementById('panelLint');
+  const h=LINT.hallazgos||[], c=LINT.cuenta||{};
+  if(!h.length){
+    cont.innerHTML='<div class="panel"><h3>Tu CV</h3><p class="lede">Ninguna bandera roja. Este panel revisa el CV base —el que va en todas las candidaturas— buscando lo que un reclutador nota en la primera pasada: cronología, huecos sin explicar, logros sin cifra, lenguaje de funciones, frases de relleno y que el modelo de evidencia siga diciendo la verdad sobre tus bullets.</p></div>';
+    return;
+  }
+  const filas=h.map(x=>`<li>
+      <span class="pill p-lint-${x.nivel}">${LINT_ES[x.nivel]||x.nivel}</span>
+      <div>
+        <div class="msg">${esc(x.mensaje)}</div>
+        ${x.detalle?`<div class="det">${esc(x.detalle)}</div>`:''}
+        <div class="cod">${esc(x.codigo)}${x.donde?' · '+esc(x.donde):''}</div>
+      </div>
+    </li>`).join('');
+  cont.innerHTML=`<div class="panel">
+    <h3>Tu CV</h3>
+    <p class="lede">Esto no mira ofertas: mira <b>tu perfil</b>, que es lo único del sistema con efecto multiplicativo. Arreglar un logro sin cifra mejora todas las candidaturas a la vez. Se recalcula en cada ejecución sobre <code>perfil/base</code>; para que un hallazgo desaparezca hay que cambiar el perfil, no la página.</p>
+    <div class="tally">
+      <div class="t"><b>${c.error||0}</b><span>errores · cuestan la criba</span></div>
+      <div class="t"><b>${c.aviso||0}</b><span>avisos · se notan al leer</span></div>
+      <div class="t"><b>${c.info||0}</b><span>apuntes · tú decides</span></div>
+      <div class="t"><b>${LINT.puntuacion||0}</b><span>penalización total</span></div>
+    </div>
+    <ul class="lintlist">${filas}</ul>
+    <p class="lede" style="margin-top:14px">No hay ninguna regla cultural aquí a propósito: si un CV lleva foto o fecha de nacimiento depende del país, y penalizar a un CV alemán por seguir la convención alemana sería peor que no revisar nada.</p>
+  </div>`;
 }
 
 
@@ -1612,6 +1847,9 @@ out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL).replace("__CV
           .replace("__FILTRADAS__", FILTRADAS_JS).replace("__EMBUDO__", EMBUDO_JS)
           .replace("__ANIOS_PERFIL__", json.dumps(ANIOS_PERFIL))
           .replace("__MARGEN_DEF__", json.dumps(MARGEN_DEF))
+          .replace("__LINT__", LINT_JS)
+          .replace("__EVIDENCIA__", json.dumps(_PERFIL_DOC.get("evidencia_orig") or {},
+                                               ensure_ascii=False, separators=(',', ':')))
           .replace("__CONTACTO__", CONTACTO_JS).replace("__NOMBRE__", CONTACTO["nombre_es"])
           .replace("__N__", str(len(rows))).replace("__FECHA__", FECHA))
 open('out/dashboard.html','w').write(out)

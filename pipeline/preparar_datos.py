@@ -137,6 +137,36 @@ def main():
           f"{len(datos.get('estado') or {})} estado, "
           f"{len(datos.get('filtradas') or {})} filtradas -> {destino}/")
 
+    _avisa_duplicados(ofertas)
+
+
+def _avisa_duplicados(ofertas):
+    """Duplicados que ya estaban dentro de `ofertas`. Sólo avisa, no borra.
+
+    Borrar aquí sería tentador y estaría mal: una oferta puede tener
+    seguimiento, notas o documentos generados, y esto no sabe cuál de las dos
+    conservar. Que lo decida quien mira. `pipeline/dedupe.py` es lo que hay que
+    usar **antes** de meter ofertas nuevas, que es donde sí se evita el problema.
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from dedupe import huella
+    except ImportError:
+        return
+    vistos, choques = {}, []
+    for o in ofertas:
+        h = huella(o)
+        if h in vistos:
+            choques.append((vistos[h], o))
+        else:
+            vistos[h] = o
+    if choques:
+        print(f"AVISO: {len(choques)} pares de ofertas parecen la misma vacante.")
+        for a, b in choques[:5]:
+            print(f"  · {a.get('empresa')} — {a.get('puesto')} [{a.get('id')}]"
+                  f"  ==  {b.get('empresa')} — {b.get('puesto')} [{b.get('id')}]")
+        print("  Revisa con `python pipeline/dedupe.py --auditar`; no se ha borrado nada.")
+
 
 if __name__ == "__main__":
     main()

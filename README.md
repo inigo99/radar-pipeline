@@ -46,6 +46,8 @@ playwright ni poppler.
 | `foco.py` | una oferta y su prioridad | el orden «foco»: prioridad menos antigüedad y menos títulos de sénior |
 | `experiencia.py` | el perfil y el texto de una oferta | los años que suma el CV y los que pide el anuncio |
 | `backfill_anios.py` | `data/` | rellena `anios_min` en las ofertas viejas leyendo sus alertas y notas (uno y no más) |
+| `dedupe.py` | ofertas candidatas y lo ya conocido | las que de verdad son nuevas |
+| `lint.py` | el perfil | las banderas rojas del CV base |
 | `embudo.py` | estado, correo, resultado | `data/embudo.json`: conversión por fuente, familia y tramo |
 | `dashboard.py` | resultado, perfil, tailor, filtradas, embudo | `out/dashboard.html`, la página completa |
 | `exportar_snapshot.py` | todo `data/` | `out/snapshot.json`, que se sube a `pipeline/snapshot` |
@@ -135,12 +137,91 @@ descartaba a quien publica una cifra un poco baja y dejaba pasar a quien no
 publica ninguna, con una estimación por encima del mínimo. Ahora se ve lo que
 cuesta la configuración y se puede cambiar con conocimiento de causa.
 
+## Deduplicación
+
+La misma vacante llega con ids distintos desde portales distintos, y muchas
+están en LinkedIn **y** en InfoJobs. `pipeline/dedupe.py` hace esa criba
+siempre igual, en tres pasadas: por id, por huella de empresa y puesto
+normalizados (sin acentos, sin `S.L.`, sin `(m/f/d)`) y por solape de tokens
+del título dentro de la misma empresa.
+
+**Nunca por subcadena.** Es la regla que impide que «Alan» case con «Talan» o
+«UST» con «Braintrust». Comparar con `in` parece razonable diez minutos y luego
+se come ofertas buenas en silencio.
+
+    python pipeline/dedupe.py candidatas.json nuevas.json   # criba un lote
+    python pipeline/dedupe.py --auditar                     # duplicados ya dentro
+
+`preparar_datos.py` pasa la auditoría al terminar y **avisa** si encuentra
+duplicados en el radar, pero no borra: una de las dos copias puede tener
+seguimiento, notas o documentos, y el script no sabe cuál conservar.
+
+Los duplicados apartados al entrar se anotan en la colección `filtradas` con
+`motivo: "duplicada"`, así que salen en el recuento de la pestaña «Filtradas»
+como cualquier otro filtro. Ver cuánta ingesta llega duplicada es la mitad de
+la razón para medirlo.
+
+## El linter del CV base
+
+`pipeline/lint.py` es la única pieza que no mira ofertas: mira el perfil. Es
+también la única con efecto multiplicativo, porque arreglar un logro sin cifra
+mejora todas las candidaturas a la vez.
+
+    python pipeline/lint.py            # informe por consola
+    python pipeline/lint.py --json
+
+`dashboard.py` lo importa y lo pinta en la pestaña «Tu CV», así que no hay un
+paso más en la tarea diaria ni un fichero más en `data/`: si se genera la
+página, el informe está hecho.
+
+Reglas en tres niveles: cronología rota o un puesto sin fechas son `error`;
+huecos de más de cinco meses, logros sin cifra, lenguaje de funciones y frases
+de relleno son `aviso`; tiempos verbales mezclados o demasiados bullets en un
+puesto son `info`. **Ninguna regla cultural**: si un CV lleva foto o fecha de
+nacimiento depende del país, y penalizar a un CV alemán por seguir la
+convención alemana es peor que no revisar nada.
+
+Dos reglas son propias de este sistema y no salen en ningún manual:
+`evidencia-sin-demostrar` avisa cuando un término marcado con evidencia 1,0 ya
+no aparece en ningún logro —el bullet que lo argumentaba se reescribió y la
+puntuación sigue contándolo—, y `techo-imposible` avisa cuando el techo
+promete más de lo que la evidencia permite. Las dos existen para que el candado
+de `perfil.py` siga apoyándose en datos verdaderos.
+
+## El validador de la carta y el correo
+
+El candado protege el CV, pero la carta y el correo salían del modelo directos
+a la pantalla: los sostenía sólo el prompt, y un prompt se cumple casi siempre,
+que no es lo mismo que siempre. `validaTexto()`, dentro de `dashboard.py`,
+es ese «casi»: compara el texto ya escrito con el perfil real y con la oferta.
+
+| Comprobación | Qué caza |
+|---|---|
+| Cifras | Un número que no está ni en tu CV ni en la oferta. Los modelos redondean el 38 % al 40 %, y esa es la cifra por la que preguntan en la entrevista. |
+| Tecnología | Un término con evidencia 0 nombrado en el texto. |
+| Años | «5 años» dicho como propio cuando el CV suma 3,2. |
+| Estilo | Las fórmulas prohibidas en tus propias reglas: «sinergia», «no dudes en», «Estimado/a»… |
+| Formato | Que nombre a la empresa; que el correo empiece por asunto y lleve el marcador `[nombre]`. |
+
+**No bloquea nada, señala.** Nombrar un hueco es correcto —es lo que pide el
+prompt— y citar la banda de la oferta también, así que la decisión sigue siendo
+de quien envía. Se ejecuta al generar y al volver a abrir un texto guardado,
+para que los borradores anteriores pasen también por aquí.
+
 ## Bandas salariales
 
 `pipeline/bandas.json` es la tabla de referencia para estimar cuando la oferta
-no publica cifra: familia × tipo de empresa, más unos pocos ajustes. No es
-ciencia, pero hace que dos ofertas parecidas salgan con la misma banda y que la
-cifra se pueda discutir, en lugar de reinventarse cada mañana.
+no publica cifra: familia × tipo de empresa, un factor por país de contratación
+y unos pocos ajustes. No es ciencia, pero hace que dos ofertas parecidas salgan
+con la misma banda y que la cifra se pueda discutir, en lugar de reinventarse
+cada mañana.
+
+El país que manda es **dónde te contratan**, no dónde está la sede: una empresa
+alemana que contrata en España paga banda española. La tabla de divisas es
+orientativa a propósito, y el fichero lo dice: si la cifra convertida cae a
+menos de un 10 % del mínimo, hay que buscar el tipo del día antes de apartar la
+oferta. Un descarte por un tipo de cambio viejo es justo el que no se puede
+defender.
 
 ## Los documentos se generan bajo demanda, en la página
 

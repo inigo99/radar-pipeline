@@ -201,6 +201,12 @@ button{font-family:inherit;cursor:pointer}
 .notas{width:100%;min-height:84px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.55;
   color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
 .notas:focus{outline:2px solid var(--accent);outline-offset:1px}
+.burb.editando textarea,.bfila.editando textarea,.bfila.editando input[type=text]{
+  width:100%;resize:vertical;font-family:inherit;font-size:13px;line-height:1.55;
+  color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.burb.editando textarea:focus,.bfila.editando textarea:focus,.bfila.editando input[type=text]:focus{
+  outline:2px solid var(--accent);outline-offset:1px}
+.bfila.editando{background:var(--surface)}
 .track{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
 .saved{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);opacity:0;transition:.2s}
 .saved.on{opacity:1}
@@ -570,6 +576,7 @@ let STATE={}, DOCS={}, CORREO={}, BANCO={}, db=null, dbListo=false, dbFallo=fals
 let CFG=Object.assign({},CFG_DEF), cfgAbierta=false, cfgGuardando=false;
 let sampleNs=null, sampleTried=false;
 let nuevaAbierta=false, nuevaGuardando=false, nuevaMsg='', MANUAL={};
+let bancoAbierto=false;  // si el <details> del banco de respuestas está desplegado; render() lo rehace entero y si no se recuerda se cierra solo al editar/guardar
 const GEN={};   // id -> {carta:{texto,estado},mail:{...}} en curso
 const CHAT={};      // id -> {texto, ctrl} de la respuesta que se está escribiendo
 const BORRADOR={};  // id -> lo que hay escrito en el compositor, que render() borraría
@@ -577,6 +584,8 @@ const LIMITE={};    // id -> {n, unidad} del formulario de esa oferta
 const VISTO={};     // id -> mensajes ya pintados, para bajar el hilo sólo cuando crece
 const SCROLL={};    // id -> dónde estaba leyendo, que render() se lleva por delante
 const FIJADO={};    // id -> false si ha subido a releer y no hay que bajarlo
+const EDITCHAT={};  // 'id|i' -> texto en edición de una respuesta ya generada del hilo
+const EDITBANCO={}; // slug -> {pregunta,texto} en edición de una entrada del banco
 
 const hoy = () => new Date().toISOString().slice(0,10);
 const st = id => STATE[id] || {estado:'activa'};
@@ -1609,6 +1618,15 @@ function burbujaHTML(r, m, i){
   if(m.rol==='tu'){
     return `<div class="burb tu"><span class="quien">Tu pregunta</span>${esc(m.texto)}</div>`;
   }
+  const clave = r.id+'|'+i;
+  if(EDITCHAT[clave] != null){
+    return `<div class="burb el editando"><span class="quien">Editando la respuesta</span>
+      <textarea data-ceditta="${clave}" style="min-height:90px">${esc(EDITCHAT[clave])}</textarea>
+      <div class="pie">
+        <button class="btn primary" data-ceditguarda="${clave}" style="padding:4px 10px;font-size:12px">Guardar</button>
+        <button class="btn" data-ceditcancela="${clave}" style="padding:4px 10px;font-size:12px">Cancelar</button>
+      </div></div>`;
+  }
   const L = lim(r.id), n = cuentaTexto(m.texto, L.unidad);
   const pasa = L.n && n > L.n;
   const enBanco = Object.values(BANCO).some(e=>e && e.texto===m.texto);
@@ -1617,26 +1635,44 @@ function burbujaHTML(r, m, i){
     <div class="pie">
       <span class="cuenta ${pasa?'pasa':''}">${n} ${L.unidad}${L.n?` de ${L.n}`:''}${pasa?' — se pasa':''}</span>
       <button class="btn" data-ccopy="${r.id}" data-i="${i}" style="padding:4px 10px;font-size:12px">Copiar</button>
+      <button class="btn" data-ceditinicia="${clave}" style="padding:4px 10px;font-size:12px">Editar</button>
       ${enBanco
         ? `<span class="pt" style="font-size:12px">Guardada en el banco</span>`
         : `<button class="btn" data-cbanco="${r.id}" data-i="${i}" style="padding:4px 10px;font-size:12px">Guardar en el banco</button>`}
     </div></div>`;
 }
 
+function bfilaHTML(s, e){
+  const edit = EDITBANCO[s];
+  if(edit){
+    return `<div class="bfila editando">
+      <label class="pt" style="font-size:11.5px" for="beditpreg-${esc(s)}">Pregunta</label>
+      <input type="text" id="beditpreg-${esc(s)}" data-beditpreg="${esc(s)}" value="${esc(edit.pregunta)}" style="width:100%;margin-bottom:6px">
+      <label class="pt" style="font-size:11.5px" for="bedittxt-${esc(s)}">Respuesta</label>
+      <textarea id="bedittxt-${esc(s)}" data-bedittxt="${esc(s)}" style="width:100%;min-height:90px">${esc(edit.texto)}</textarea>
+      <div class="bmeta">
+        <button class="btn primary" data-beditguarda="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Guardar</button>
+        <button class="btn" data-beditcancela="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Cancelar</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="bfila">
+    <p class="bq">${esc(e.pregunta)}</p>
+    <p class="bt">${esc(e.texto)}</p>
+    <div class="bmeta">${esc(e.empresa||'—')}${e.puesto?' · '+esc(e.puesto):''}${e.guardado?' · '+esc(String(e.guardado).slice(0,10)):''}${e.editado?' · editada':''}
+      <button class="btn" data-bcopy="${esc(s)}" style="padding:3px 9px;font-size:11.5px;margin-left:8px">Copiar</button>
+      <button class="btn" data-bedita="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Editar</button>
+      <button class="btn" data-bdel="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Borrar</button>
+    </div>
+  </div>`;
+}
 function bancoHTML(r){
   const filas = Object.entries(BANCO).filter(([,e])=>e && e.texto);
   if(!filas.length) return '';
   filas.sort((a,b)=>String(b[1].guardado||'').localeCompare(String(a[1].guardado||'')));
-  return `<details class="banco">
+  return `<details class="banco"${bancoAbierto?' open':''}>
     <summary>Banco de respuestas (${filas.length})</summary>
-    ${filas.map(([s,e])=>`<div class="bfila">
-      <p class="bq">${esc(e.pregunta)}</p>
-      <p class="bt">${esc(e.texto)}</p>
-      <div class="bmeta">${esc(e.empresa||'—')}${e.puesto?' · '+esc(e.puesto):''}${e.guardado?' · '+esc(String(e.guardado).slice(0,10)):''}
-        <button class="btn" data-bcopy="${esc(s)}" style="padding:3px 9px;font-size:11.5px;margin-left:8px">Copiar</button>
-        <button class="btn" data-bdel="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Borrar</button>
-      </div>
-    </div>`).join('')}
+    ${filas.map(([s,e])=>bfilaHTML(s,e)).join('')}
   </details>`;
 }
 
@@ -1731,6 +1767,30 @@ async function guardaChat(id, ms){
   catch(e){ toast('Respondido, pero no se ha podido guardar; cópialo antes de recargar'); }
 }
 
+/* Editar a mano una respuesta ya generada del hilo -- por si Claude se acerca
+   pero no clava el tono, o hace falta corregir un dato después de escribirla.
+   No toca lo que ya hubiera guardado en el banco con el texto anterior: son
+   copias independientes, igual que un precedente "se adapta, no se reescribe". */
+function iniciaEditarChat(id, i){
+  const m = mensajes(id)[i]; if(!m || m.rol!=='el') return;
+  EDITCHAT[id+'|'+i] = m.texto; render();
+  const ta = document.querySelector(`[data-ceditta="${id}|${i}"]`);
+  if(ta){ ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
+}
+function cancelaEditarChat(clave){ delete EDITCHAT[clave]; render(); }
+async function guardaEditarChat(clave){
+  const [id, iTxt] = clave.split('|'); const i = +iTxt;
+  const ta = document.querySelector(`[data-ceditta="${clave}"]`);
+  const texto = ((ta && ta.value) || EDITCHAT[clave] || '').trim();
+  if(!texto){ toast('La respuesta no puede quedar vacía'); return; }
+  const ms = mensajes(id).slice();
+  if(!ms[i] || ms[i].rol!=='el') return;
+  ms[i] = Object.assign({}, ms[i], {texto, editado:new Date().toISOString()});
+  delete EDITCHAT[clave];
+  await guardaChat(id, ms);
+  toast('Respuesta editada');
+}
+
 async function guardarEnBanco(id, i){
   const r = DATA.find(x=>x.id===id); if(!r) return;
   const ms = mensajes(id), respuesta = ms[i];
@@ -1753,6 +1813,30 @@ async function borrarDelBanco(slug){
   if(!db) return;
   try{ await db.doc('respuestas/'+slug).delete(); toast('Borrada del banco'); }
   catch(e){ toast('No se ha podido borrar del banco'); }
+}
+
+/* Editar a mano una entrada ya guardada del banco: la pregunta, la respuesta,
+   o ambas. El slug (id del documento) no cambia aunque se retoque la
+   pregunta, para no perder qué precedente es cuál. */
+function iniciaEditarBanco(slug){
+  const e = BANCO[slug]; if(!e) return;
+  EDITBANCO[slug] = {pregunta:e.pregunta||'', texto:e.texto||''};
+  bancoAbierto=true; render();
+}
+function cancelaEditarBanco(slug){ delete EDITBANCO[slug]; bancoAbierto=true; render(); }
+async function guardaEditarBanco(slug){
+  const actual = BANCO[slug]; if(!actual) return;
+  const pta = document.querySelector(`[data-beditpreg="${slug}"]`);
+  const tta = document.querySelector(`[data-bedittxt="${slug}"]`);
+  const pregunta = ((pta && pta.value) || '').trim();
+  const texto = ((tta && tta.value) || '').trim();
+  if(!pregunta || !texto){ toast('La pregunta y la respuesta no pueden quedar vacías'); return; }
+  const entrada = Object.assign({}, actual, {pregunta, texto, editado:new Date().toISOString()});
+  BANCO = Object.assign({}, BANCO, {[slug]:entrada});
+  delete EDITBANCO[slug]; bancoAbierto=true; render();
+  if(!db){ toast('Editada sólo en esta pestaña: no hay base de datos'); return; }
+  try{ await db.doc('respuestas/'+slug).set(entrada); toast('Entrada del banco editada'); }
+  catch(e){ toast('No se ha podido guardar el cambio en el banco'); }
 }
 
 async function copiar(texto, mensajeOk){
@@ -1989,10 +2073,26 @@ function bind(){
     copiar(m&&m.texto, 'Respuesta copiada');
   });
   document.querySelectorAll('[data-cbanco]').forEach(b=>b.onclick=()=>guardarEnBanco(b.dataset.cbanco, +b.dataset.i));
+  document.querySelectorAll('[data-ceditinicia]').forEach(b=>b.onclick=()=>{
+    const [id,i]=b.dataset.ceditinicia.split('|'); iniciaEditarChat(id, +i);
+  });
+  document.querySelectorAll('[data-ceditcancela]').forEach(b=>b.onclick=()=>cancelaEditarChat(b.dataset.ceditcancela));
+  document.querySelectorAll('[data-ceditguarda]').forEach(b=>b.onclick=()=>guardaEditarChat(b.dataset.ceditguarda));
+  document.querySelectorAll('[data-ceditta]').forEach(ta=>{
+    ta.onkeydown=e=>{
+      if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); guardaEditarChat(ta.dataset.ceditta); }
+      if(e.key==='Escape'){ e.preventDefault(); cancelaEditarChat(ta.dataset.ceditta); }
+    };
+  });
   document.querySelectorAll('[data-bcopy]').forEach(b=>b.onclick=()=>{
     const e=BANCO[b.dataset.bcopy]; copiar(e&&e.texto);
   });
   document.querySelectorAll('[data-bdel]').forEach(b=>b.onclick=()=>borrarDelBanco(b.dataset.bdel));
+  document.querySelectorAll('[data-bedita]').forEach(b=>b.onclick=()=>iniciaEditarBanco(b.dataset.bedita));
+  document.querySelectorAll('[data-beditcancela]').forEach(b=>b.onclick=()=>cancelaEditarBanco(b.dataset.beditcancela));
+  document.querySelectorAll('[data-beditguarda]').forEach(b=>b.onclick=()=>guardaEditarBanco(b.dataset.beditguarda));
+  const detBanco = document.querySelector('details.banco');
+  if(detBanco) detBanco.ontoggle = ()=>{ bancoAbierto = detBanco.open; };
   document.querySelectorAll('[data-cborra]').forEach(b=>b.onclick=()=>{
     guardaChat(b.dataset.cborra, []);
     toast('Hilo vaciado. Lo que hubieras guardado en el banco sigue ahí.');

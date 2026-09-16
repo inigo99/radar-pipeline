@@ -398,7 +398,7 @@ footer b{color:var(--ink-2);font-weight:600}
     </div>
     <button class="cfgbtn" id="cfgbtn">Configuración</button>
   </div>
-  <p class="sub">Ofertas recientes que encajan con tu perfil: 100&nbsp;% remoto desde España o desde el extranjero, y presencial o híbrido en Navarra y Gipúzcoa. Rastreadas en LinkedIn, InfoJobs, Tecnoempleo, Indeed y los portales de empleo remoto. El CV adaptado, la cover letter y el correo a RRHH se generan desde dentro de la oferta, con un botón, sólo para las que te interesen. Pulsa cualquier fila para abrirla, o «Configuración» para cambiar qué se busca: la tarea diaria lo lee antes de cada ejecución.</p>
+  <p class="sub">Ofertas recientes que encajan con tu perfil: 100&nbsp;% remoto desde España o desde el extranjero, y presencial o híbrido en Navarra y Gipúzcoa. Rastreadas en LinkedIn, InfoJobs, JSearch (Google for Jobs), Tecnoempleo, Indeed y los portales de empleo remoto. El CV adaptado, la cover letter y el correo a RRHH se generan desde dentro de la oferta, con un botón, sólo para las que te interesen. Pulsa cualquier fila para abrirla, o «Configuración» para cambiar qué se busca: la tarea diaria lo lee antes de cada ejecución.</p>
 </header>
 
 <div class="stats" id="stats"></div>
@@ -507,10 +507,10 @@ const CFG_DEF={
   salario_min:45000, exigir_salario_publicado:false,
   anios_perfil:null, margen_anios:MARGEN_DEF,
   ventana_horas:24,
-  fuentes:["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Manfred"],
+  fuentes:["LinkedIn","InfoJobs","JSearch","Tecnoempleo","Indeed","Manfred"],
   fuentes_semanales:["Himalayas","WeWorkRemotely","RemoteOK"]
 };
-const FUENTES_POS=["LinkedIn","InfoJobs","Tecnoempleo","Indeed","Manfred","Himalayas","WeWorkRemotely","RemoteOK"];
+const FUENTES_POS=["LinkedIn","InfoJobs","JSearch","Tecnoempleo","Indeed","Manfred","Himalayas","WeWorkRemotely","RemoteOK"];
 const AMBITOS_POS=["España","Internacional","Navarra / Gipuzkoa"];
 const NOV_CLS={rechazo:'p-nov-rechazo',avance:'p-nov-avance',acuse:'p-nov-acuse'};
 let sortK='foco', sortDir=-1, openId=null, vista='hoy';
@@ -2186,7 +2186,7 @@ function stats(){
    ['En remoto',''+rem,`${n-rem} presenciales o híbridas en Navarra y Gipuzkoa`],
    ['Internacionales',''+DATA.filter(r=>r.ambito==='Internacional').length,'empresas de fuera que contratan desde aquí'],
    ['Foco IA/DS',''+DATA.filter(r=>FAMILIAS_FOCO.has(r.familia)).length,'AI/ML, GenAI, Computer Vision o Data Science/Eng.'],
-   ['Portales',''+new Set(DATA.map(r=>r.fuente)).size,'LinkedIn, InfoJobs, Tecnoempleo, Indeed y portales remotos'],
+   ['Portales',''+new Set(DATA.map(r=>r.fuente)).size,'LinkedIn, InfoJobs, JSearch, Tecnoempleo, Indeed y portales remotos'],
    ['Salario medio',eur(med),'mín. filtrado: 45 000 €'],
    ['Filtradas',''+FILTRADAS.length,'apartadas por salario o modalidad sin confirmar'],
    ['Sin tocar',''+DATA.filter(r=>st(r.id).estado==='activa'&&!apartadaExp(r)).length,'activas a las que aún no has aplicado ni descartado'],

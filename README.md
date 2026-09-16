@@ -84,7 +84,7 @@ ya resuelto, para no volver a derivarlo —ni a romperlo— cada mañana:
 | `linkedin.js` | endpoint de invitado, parseo por `<li>`, criba y fichas |
 | `infojobs.js` | listado por regex sobre el HTML crudo, recorte de la descripción, fichas |
 | `manfred.js` | API JSON pública de Manfred: salario, `remotePercentage` y técnicas con nivel ya estructurados, sin parseo de HTML |
-| `vocabulario.js` | diccionario término → regex para redactar los `reqs` |
+| `vocabulario.js` | diccionario término → regex para redactar los `reqs`, sin leer la ficha entera |
 | `bundle.min.js` | los tres primeros (común + LinkedIn + InfoJobs), concatenados y minificados |
 
 **Manfred no necesita subagente.** Como usa una API JSON en vez de HTML, no
@@ -106,6 +106,21 @@ términos del vocabulario en la misma pasada que la modalidad, así que cada
 ficha se pide una sola vez en toda la ejecución — antes se pedía dos, una para
 filtrar (paso 4) y otra para escribir los `reqs` (paso 6), literalmente el
 mismo HTML descargado dos veces.
+
+Ese segundo ahorro no se aprovechaba del todo: el paso 6 seguía volcando la
+ficha entera al contexto para redactar los `reqs`, aunque ya no hiciera falta
+un segundo `fetch` para conseguirla — sólo se ahorraba la descarga, no la
+lectura. Desde el 16-sep-2026, `li.snippets(id)` / `ij.snippets(hash)`
+devuelven, de una sola oferta, los términos con más apariciones junto con un
+fragmento corto (~110 caracteres) de dónde aparece cada uno por primera vez
+— lo justo para decidir el peso («imprescindible» pesa más que «se
+valorará») y copiar la etiqueta en las palabras del anuncio, sin las
+900-1.200 caracteres de `li.leer()`/`ij.leer()`. Estas dos funciones quedan
+como último recurso: cuando la lista de términos sale corta o rara, o para
+redactar el `resumen` de `tailor`. Para **Manfred** no hace falta ni eso:
+`o.reqs` ya sale de `detallar()` con el formato exacto de `vocabulario.md`
+(`[clave, peso, etiqueta]`), calculado a partir del nivel y la sección de
+cada técnica (`MAPA_TECH`/`WEIGHT` en `manfred.js`) — se copia tal cual.
 
 Se probaron tres atajos el 9 de septiembre de 2026 y **los tres fallan en
 linkedin.com**; no vuelvas a intentarlos:
@@ -151,6 +166,31 @@ motivo. El filtro de salario, tal cual estaba, penalizaba la transparencia —
 descartaba a quien publica una cifra un poco baja y dejaba pasar a quien no
 publica ninguna, con una estimación por encima del mínimo. Ahora se ve lo que
 cuesta la configuración y se puede cambiar con conocimiento de causa.
+
+## Filtrado de configuración
+
+Hasta el 16-sep-2026, `excluir_keywords`, `excluir_empresas`, `salario_min`
+y `exigir_salario_publicado` se aplicaban a ojo sobre las candidatas. Aparte
+del tiempo, dejaba un hueco real: `li.filtrar()` sí aplicaba
+`excluir_empresas`, pero `ij.filtrar()` y `mf.filtrar()` nunca lo hicieron —
+una intermediaria vetada que llegara por InfoJobs, Manfred o el subagente de
+Tecnoempleo/Indeed sólo se caía si alguien la pillaba a tiempo. Ahora
+`pipeline/filtrar.py` aplica esas cuatro reglas en código, igual para las
+candidatas de cualquier fuente, entre el paso 4 y `dedupe.py`:
+
+    python pipeline/filtrar.py candidatas.json data/ok.json --filtros filtros.json
+
+Sólo esas cuatro — **modalidad y `ambitos` siguen sin tocarse aquí, a
+propósito**. La modalidad ya viene restringida a
+remoto/local/remoto_sin_confirmar desde `li.clasificar()`/`ij.clasificar()`/
+`mf.filtrar()`, así que filtrarla otra vez en Python sería casi siempre
+redundante y, en el único caso en que no lo sería (cambiar `areas_locales` en
+el dashboard a una zona que `R.RE_LOCAL` no reconoce todavía), no habría nada
+que rescatar: la oferta nunca sale del navegador. Y `ambitos` necesita saber
+si la frase que encuentra `R.ambito()` es una restricción o una apertura —
+gramaticalmente son iguales, así que decidirlo a ciegas es inventarse un
+criterio y arriesgarse a tirar una oferta buena, justo lo que avisa
+`pipeline/vocabulario.md`. Eso sigue necesitando que alguien lea la frase.
 
 ## Deduplicación
 

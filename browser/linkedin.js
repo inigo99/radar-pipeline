@@ -85,14 +85,24 @@
   };
 
   /* Calcula los hits de vocabulario sobre texto ya normalizado. Compartida
-   * con terminos() para no repetir la cuenta si ya está en j.terminos. */
+   * con terminos() para no repetir la cuenta si ya está en j.terminos.
+   *
+   * Cada hit lleva un fragmento corto (~110 caracteres) alrededor de la
+   * PRIMERA aparición del término: no para contar, sino para que al escribir
+   * `reqs` en el paso 6 se pueda poner el peso («imprescindible» pesa más que
+   * «se valorará») sin leer la ficha entera — ver snippets() más abajo, y el
+   * porqué en la cabecera de vocabulario.js. */
   const _cuentaTerminos = (tn, dicc) => {
     const D = dicc || R.DICC;
     if (!D || !tn) return null;
     const hits = [];
     for (const k in D) {
-      const m = tn.match(new RegExp(D[k], 'g'));
-      if (m) hits.push([k, m.length]);
+      const re = D[k];
+      const m = tn.match(new RegExp(re, 'g'));
+      if (!m) continue;
+      const idx = tn.search(new RegExp(re));
+      const frag = idx >= 0 ? tn.slice(Math.max(0, idx - 40), idx + 70).replace(/\s+/g, ' ').trim() : '';
+      hits.push([k, m.length, frag]);
     }
     hits.sort((a, b) => b[1] - a[1]);
     return hits;
@@ -142,10 +152,11 @@
     return { dentro: dentro.length, revisar: revisar.length, fuera: fuera.length };
   };
 
-  /* Descripción completa de una oferta ya aceptada, para redactar sus `reqs`.
-   * Ésta es la única excepción a la regla de no volcar texto: son cuatro o
-   * cinco al día, y los `reqs` tienen que salir de lo que el anuncio dice de
-   * verdad. Sale a trozos porque la salida se corta sobre los 1.200 caracteres. */
+  /* Descripción completa de una oferta ya aceptada. Antes era la única forma
+   * de escribir sus `reqs`; desde el 16-sep-2026 usa snippets() en su lugar
+   * para eso (ver más abajo) y esto queda como último recurso, para cuando
+   * la lista de términos salga corta o rara, o para redactar `resumen`.
+   * Sale a trozos porque la salida se corta sobre los 1.200 caracteres. */
   li.leer = (id, desde, chars) => {
     const j = li.det.find(x => x.id === String(id));
     if (!j || !j._tn) return 'no encontrada (¿detallada?)';
@@ -162,4 +173,20 @@
       const hits = j.terminos || _cuentaTerminos(j._tn, dicc) || [];
       return j.id + '|' + hits.slice(0, 22).map(h => h[0] + ':' + h[1]).join(',');
     });
+
+  /* Lo que hace falta para escribir los `reqs` del paso 6 SIN leer la ficha
+   * entera: los `maxTerms` términos con más apariciones, cada uno con un
+   * trozo corto de dónde aparece por primera vez, para poner el peso y la
+   * etiqueta con la frase real del anuncio. Una sola oferta por llamada
+   * (las 4-5 que sobreviven al día), así que cabe de sobra en los ~1.200
+   * caracteres de salida. Si sale vacío o insuficiente, cae a li.leer(). */
+  li.snippets = (id, maxTerms) => {
+    const j = li.det.find(x => x.id === String(id));
+    if (!j) return 'no encontrada (¿detallada?)';
+    const hits = j.terminos || _cuentaTerminos(j._tn) || [];
+    if (!hits.length) return '(sin términos de vocabulario.js — usa li.leer())';
+    return hits.slice(0, maxTerms || 10)
+      .map(h => `${h[0]} (${h[1]}x): "${h[2] || ''}"`)
+      .join('\n');
+  };
 })(window.__radar);

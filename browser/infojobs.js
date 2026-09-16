@@ -72,13 +72,20 @@
     return txt.slice(ini, fin);
   };
 
+  /* Cada hit lleva un fragmento corto (~110 caracteres) alrededor de la
+   * PRIMERA aparición del término, para escribir `reqs` en el paso 6 sin
+   * leer la ficha entera — ver ij.snippets() más abajo. */
   const _cuentaTerminos = (tn, dicc) => {
     const D = dicc || R.DICC;
     if (!D || !tn) return null;
     const hits = [];
     for (const k in D) {
-      const m = tn.match(new RegExp(D[k], 'g'));
-      if (m) hits.push([k, m.length]);
+      const re = D[k];
+      const m = tn.match(new RegExp(re, 'g'));
+      if (!m) continue;
+      const idx = tn.search(new RegExp(re));
+      const frag = idx >= 0 ? tn.slice(Math.max(0, idx - 40), idx + 70).replace(/\s+/g, ' ').trim() : '';
+      hits.push([k, m.length, frag]);
     }
     hits.sort((a, b) => b[1] - a[1]);
     return hits;
@@ -127,7 +134,9 @@
     return { dentro: dentro.length, fuera: ij.det.length - dentro.length };
   };
 
-  /* Trozo de descripción de una oferta ya aceptada, para redactar sus `reqs`. */
+  /* Trozo de descripción de una oferta ya aceptada. Desde el 16-sep-2026,
+   * último recurso: para escribir `reqs` usa ij.snippets() en su lugar
+   * (ver más abajo); esto queda para cuando salga corto o para el `resumen`. */
   ij.leer = (hash, chars) => {
     const o = ij.det.find(x => x.hash.startsWith(hash));
     return o ? o._desc.slice(0, chars || 900) : 'no encontrada';
@@ -138,4 +147,17 @@
     const hits = o.terminos || _cuentaTerminos(o._dn, dicc) || [];
     return ij.idPara(o) + '|' + hits.slice(0, 22).map(h => h[0] + ':' + h[1]).join(',');
   });
+
+  /* Igual que li.snippets(): los términos con más apariciones de UNA oferta,
+   * cada uno con la frase corta donde aparece por primera vez, para poner
+   * peso y etiqueta en el paso 6 sin leer la ficha entera. */
+  ij.snippets = (hash, maxTerms) => {
+    const o = ij.det.find(x => x.hash.startsWith(hash));
+    if (!o) return 'no encontrada';
+    const hits = o.terminos || _cuentaTerminos(o._dn) || [];
+    if (!hits.length) return '(sin términos de vocabulario.js — usa ij.leer())';
+    return hits.slice(0, maxTerms || 10)
+      .map(h => `${h[0]} (${h[1]}x): "${h[2] || ''}"`)
+      .join('\n');
+  };
 })(window.__radar);

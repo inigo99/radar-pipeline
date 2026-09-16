@@ -277,6 +277,39 @@ td{padding:11px 10px;vertical-align:top}
 .hint{font-size:12px;color:var(--ink-3);margin:7px 0 0}
 .letter{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;
   font-size:13px;line-height:1.6;color:var(--ink-2);white-space:pre-wrap;max-height:230px;overflow:auto}
+/* ---- Chat de respuestas de formulario ---- */
+.chat{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow:auto;padding-right:4px}
+.burb{border-radius:10px;padding:10px 13px;font-size:13px;line-height:1.6;white-space:pre-wrap}
+.burb.tu{background:var(--accent-soft);color:var(--ink);align-self:flex-end;max-width:88%;
+  border-bottom-right-radius:3px}
+.burb.el{background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);
+  border-bottom-left-radius:3px}
+.burb .quien{display:block;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.burb .pie{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:9px}
+.cuenta{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums}
+.cuenta.pasa{color:var(--crit);font-weight:600}
+.precedente{font-size:12px;color:var(--ink-3);font-style:italic;margin:0 0 7px}
+.compositor{display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:1px solid var(--line);
+  padding-top:12px}
+.compositor textarea{width:100%;min-height:74px;resize:vertical;font:inherit;font-size:13px;
+  padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  color:var(--ink)}
+.limrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-2)}
+.limrow input{width:78px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px}
+.limrow select{padding:5px 8px;border:1px solid var(--line);border-radius:7px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px}
+.limrow .sep{flex:1}
+details.banco{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+details.banco summary{cursor:pointer;font-size:12.5px;color:var(--ink-2)}
+.bfila{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-top:8px;
+  background:var(--surface-2)}
+.bfila .bq{font-size:12.5px;font-weight:600;color:var(--ink);margin:0 0 4px}
+.bfila .bt{font-size:12.5px;color:var(--ink-2);line-height:1.55;margin:0;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.bfila .bmeta{font-size:11.5px;color:var(--ink-3);margin-top:5px}
 .empty{padding:44px;text-align:center;color:var(--ink-3)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;
   padding:18px 20px 22px;box-shadow:var(--shadow)}
@@ -418,6 +451,7 @@ footer b{color:var(--ink-2);font-weight:600}
   <p><b>Requisitos que no cubres.</b> Dentro de cada oferta, los huecos van clasificados por si merece la pena repasarlos antes de una posible entrevista: en verde, cuestión de días; en ámbar, varias semanas de dedicación real; en rojo, lo que no es realista cubrir en ese plazo (una titulación, un idioma nuevo, años de experiencia, una disciplina muy especializada) — ahí la idea no es estudiar de un día para otro, es tener lista una respuesta honesta. Esto es sólo información para ti: nunca se usa para tocar el CV, la carta o el correo, que nunca dicen que sabes algo que no sabes.</p>
   <p><b>Tu CV.</b> La pestaña «Tu CV» es la única que no mira ofertas: revisa el perfil base contra lo que un reclutador nota en la primera pasada —cronología, huecos sin explicar, logros sin cifra, lenguaje de funciones, frases de relleno— y comprueba además que el modelo de evidencia siga siendo verdad: que lo marcado como demostrado aparezca de verdad en algún logro, y que ningún techo prometa más de lo que la evidencia permite. Arreglar algo aquí mejora todas las candidaturas a la vez, no una. No hay ninguna regla cultural: si un CV lleva foto o fecha de nacimiento depende del país.</p>
   <p><b>Los borradores se revisan solos.</b> La carta y el correo pasan por un validador antes de que los leas: cifras que no salen ni de tu CV ni de la oferta, tecnologías que no tienes, años por encima de los tuyos dichos como propios y fórmulas de plantilla que están prohibidas en tus reglas de estilo. No bloquea nada —nombrar un hueco es correcto, y citar la banda de la oferta también—, sólo señala la frase. Es el equivalente para los textos del candado que ya protegía el CV.</p>
+  <p><b>Las preguntas de los formularios.</b> Dentro de cada oferta, la pestaña «Respuestas» es un chat al que le pegas la pregunta tal cual viene del formulario y te la devuelve con tu voz, tu perfil y el contexto de esa oferta. Si no encaja se lo dices en el mismo hilo —más corta, menos formal, en inglés— en vez de empezar de cero. Fija el límite del formulario y el contador te avisa en rojo cuando la respuesta se pasa. Una respuesta que te guste se guarda en el banco, y la próxima vez que una empresa pregunte algo parecido entra como precedente: se adapta, no se reescribe. Las respuestas pasan por el mismo validador que la carta, que es donde más fácil se cuela una cifra inventada, y nunca se rellena sola una pretensión salarial o una fecha: deja un <b>[pendiente]</b> para que lo pongas tú.</p>
   <p><b>Ámbito.</b> «España» es contrato y empresa aquí. «Internacional» son empresas de fuera que contratan en remoto y cuya restricción geográfica permite residir en España — está verificada oferta por oferta, pero conviene confirmarla en el primer contacto. «Navarra / Gipuzkoa» son las presenciales e híbridas dentro de tus provincias.</p>
   <p><b>Salarios.</b> En verde, el que publica la oferta. En ámbar, una estimación; abre la fila para ver de dónde sale cada una. Referencias: Guía Salarial Manfred 2026, Informe de salarios en IA en España 2026 (Universidad VIU) y Levels.fyi por empresa. El mínimo está en 45 000 €, pero las que caen por publicar una cifra más baja ya no desaparecen: van a la pestaña «Filtradas», porque un filtro que no se puede auditar acaba costando ofertas buenas sin que te enteres.</p>
   <p><b>Modalidad.</b> Se decide con la frase literal de la descripción, no con la etiqueta del portal, que miente a menudo. Cuando el portal la marca remota y la descripción no dice nada que lo contradiga, la oferta entra igual pero marcada como <em>remoto sin confirmar</em>: es una llamada de treinta segundos, no un motivo para tirarla.</p>
@@ -481,10 +515,16 @@ const AMBITOS_POS=["España","Internacional","Navarra / Gipuzkoa"];
 const NOV_CLS={rechazo:'p-nov-rechazo',avance:'p-nov-avance',acuse:'p-nov-acuse'};
 let sortK='foco', sortDir=-1, openId=null, vista='hoy';
 const OBJ_DEF=10;   // candidaturas por semana; se cambia desde la pestaña «Hoy»
-let STATE={}, DOCS={}, CORREO={}, db=null, dbListo=false, dbFallo=false;
+let STATE={}, DOCS={}, CORREO={}, BANCO={}, db=null, dbListo=false, dbFallo=false;
 let CFG=Object.assign({},CFG_DEF), cfgAbierta=false, cfgGuardando=false;
 let sampleNs=null, sampleTried=false;
 const GEN={};   // id -> {carta:{texto,estado},mail:{...}} en curso
+const CHAT={};      // id -> {texto, ctrl} de la respuesta que se está escribiendo
+const BORRADOR={};  // id -> lo que hay escrito en el compositor, que render() borraría
+const LIMITE={};    // id -> {n, unidad} del formulario de esa oferta
+const VISTO={};     // id -> mensajes ya pintados, para bajar el hilo sólo cuando crece
+const SCROLL={};    // id -> dónde estaba leyendo, que render() se lleva por delante
+const FIJADO={};    // id -> false si ha subido a releer y no hay que bajarlo
 
 const hoy = () => new Date().toISOString().slice(0,10);
 const st = id => STATE[id] || {estado:'activa'};
@@ -509,6 +549,11 @@ async function initEstado(){
   db.collection('config').onSnapshot(snap=>{
     snap.docs.forEach(d=>{ if(d.id==='filtros' && d.data()) CFG=Object.assign({},CFG_DEF,d.data()); });
     if(cfgAbierta) pintaCfg();
+  }, e=>{});
+  db.collection('respuestas').onSnapshot(snap=>{
+    const nuevo={};
+    snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
+    BANCO=nuevo; render();
   }, e=>{});
   db.collection('correo').onSnapshot(snap=>{
     const nuevo={};
@@ -794,9 +839,11 @@ function detailHTML(r){
         <div class="tabs">
           <button class="tab ${tabAbierta(r.id)==='carta'?'on':''}" data-tab="carta" data-for="${r.id}">Cover letter</button>
           <button class="tab ${tabAbierta(r.id)==='mail'?'on':''}" data-tab="mail" data-for="${r.id}">Correo a RRHH</button>
+          <button class="tab ${tabAbierta(r.id)==='chat'?'on':''}" data-tab="chat" data-for="${r.id}">Respuestas${mensajes(r.id).length?` <span class="pt">(${mensajes(r.id).filter(m=>m.rol==='el').length})</span>`:''}</button>
         </div>
         <div id="pane-carta-${r.id}" ${tabAbierta(r.id)==='carta'?'':'hidden'}>${panelDoc(r,'carta')}</div>
         <div id="pane-mail-${r.id}" ${tabAbierta(r.id)==='mail'?'':'hidden'}>${panelDoc(r,'mail')}</div>
+        <div id="pane-chat-${r.id}" ${tabAbierta(r.id)==='chat'?'':'hidden'}>${panelChat(r)}</div>
       </div>
     </div></div></td></tr>`;
 }
@@ -972,8 +1019,10 @@ function validaTexto(texto, r, kind){
       detalle:'Está en tus reglas de estilo, así que si ha salido es que el modelo se ha ido a la carta modelo.'});
   }
 
-  // 5. Comprobaciones de formato, distintas según el documento.
-  if(!new RegExp('\\b'+String(r.empresa||'').split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(t)){
+  // 5. Comprobaciones de formato, distintas según el documento. En una
+  // respuesta de formulario no hay que nombrar a la empresa: muchas preguntas
+  // («un proyecto del que estés orgulloso») no van de ellos.
+  if(kind!=='chat' && !new RegExp('\\b'+String(r.empresa||'').split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(t)){
     avisos.push({nivel:'aviso', mensaje:'No nombra a la empresa en ningún sitio.',
       detalle:'Una carta que vale para cualquier empresa se lee como lo que es.'});
   }
@@ -992,6 +1041,267 @@ function avisosHTML(avisos){
   const filas=avisos.map(a=>`<li><span class="pill p-lint-${a.nivel==='error'?'error':(a.nivel==='info'?'info':'aviso')}">${a.nivel==='error'?'Revisa':(a.nivel==='info'?'Apunte':'Ojo')}</span>
     <div><div class="msg">${esc(a.mensaje)}</div>${a.detalle?`<div class="det">${esc(a.detalle)}</div>`:''}</div></li>`).join('');
   return `<ul class="lintlist" style="margin-bottom:10px">${filas}</ul>`;
+}
+
+/* ---------- Las preguntas de los formularios ----------
+   Casi ninguna candidatura se queda en «adjunta tu CV»: hay tres o cuatro
+   campos de texto libre —por qué nosotros, un proyecto del que estés orgulloso,
+   pretensión salarial— que se responden a las once de la noche y acaban
+   sonando a plantilla o, peor, prometiendo algo que no está en el CV.
+
+   Esto es el mismo motor de la carta, en formato conversación: pegas la
+   pregunta tal cual viene del formulario, sale la respuesta con tu voz y tu
+   perfil, y si no encaja se lo dices («más corto», «menos formal», «en
+   inglés») en vez de regenerar desde cero.
+
+   Tres cosas que lo hacen distinto de la carta:
+     - **El límite manda.** Los formularios cortan a 500 caracteres o a 150
+       palabras sin avisar. El límite se fija por oferta y el contador está a
+       la vista, en rojo si se pasa.
+     - **El banco.** Las preguntas se repiten entre empresas. Una respuesta que
+       te gusta se guarda, y la próxima vez que salga una parecida entra en el
+       contexto como precedente: se adapta, no se reescribe de cero.
+     - **Pasa por el validador**, igual que la carta y el correo. Una respuesta
+       de formulario es exactamente donde es más fácil que se cuele una cifra
+       inventada. */
+
+const LIM_DEF = {n:null, unidad:'caracteres'};
+const lim = id => LIMITE[id] || LIM_DEF;
+const mensajes = id => (((DOCS[id]||{}).chat)||{}).mensajes || [];
+
+const cuentaTexto = (txt, unidad) =>
+  unidad==='palabras' ? (String(txt||'').trim().match(/\S+/g)||[]).length : String(txt||'').length;
+
+/* Palabras que salen en toda pregunta de formulario y no distinguen una de
+   otra. Sin quitarlas, «¿por qué quieres trabajar aquí?» casaría con
+   «¿por qué dejaste tu último trabajo?». */
+const RUIDO_PREG = new Set(('que cual cuales como cuando donde quien por para con sin de del la el los ' +
+  'las un una unos unas y o u en a al se su sus tu tus mi mis lo es son ser estar haber tiene tienes ' +
+  'cuentanos cuentame describe explica hablanos dinos indica detalla brevemente favor puedes podrias ' +
+  'crees consideras nos te me si no mas menos algo alguna alguno sobre desde hasta ' +
+  'what which how when where who why your you the a an of to in on for with and or is are do does ' +
+  'tell us me about describe explain please could would can your yourself briefly').split(' '));
+
+function tokensPregunta(q){
+  const plano = String(q||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  return new Set((plano.match(/[a-z0-9+#]+/g)||[]).filter(w=>w.length>2 && !RUIDO_PREG.has(w)));
+}
+
+function solapeSets(a,b){
+  if(!a.size || !b.size) return 0;
+  let comunes=0; a.forEach(x=>{ if(b.has(x)) comunes++; });
+  return comunes / (a.size + b.size - comunes);
+}
+
+/* Precedentes del banco para una pregunta nueva. Se excluye la propia oferta:
+   dentro de una misma candidatura ya está el historial de la conversación. */
+function parecidasEnBanco(pregunta, ofertaId){
+  const t = tokensPregunta(pregunta);
+  return Object.entries(BANCO)
+    .filter(([,e]) => e && e.texto && e.oferta !== ofertaId)
+    .map(([slug,e]) => ({slug, e, solape: solapeSets(t, tokensPregunta(e.pregunta))}))
+    .filter(x => x.solape >= 0.34)
+    .sort((a,b) => b.solape - a.solape)
+    .slice(0,2);
+}
+
+function hash4(s){
+  let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))>>>0;
+  return h.toString(36).slice(0,4);
+}
+const slugPregunta = q => (slug(q).toLowerCase().slice(0,34) || 'pregunta') + '_' + hash4(String(q));
+
+function promptChat(r, pregunta, historial, precedentes){
+  const idioma = r.idioma==='es' ? 'español' : 'inglés';
+  const L = lim(r.id);
+  const limiteTxt = L.n
+    ? `- El formulario corta en ${L.n} ${L.unidad}. No los pases: es un límite duro, no una sugerencia. Si no cabe todo, quita contexto y deja el logro concreto.`
+    : `- No hay límite fijado, así que sé breve igualmente: dos o tres frases salvo que la pregunta pida desarrollo.`;
+
+  const prec = precedentes.length
+    ? `\n\nASÍ RESPONDISTE ANTES A PREGUNTAS PARECIDAS (adáptalo a esta empresa; no lo copies literal, y no arrastres el nombre de la otra empresa):\n`
+      + precedentes.map(x=>`- A «${x.e.pregunta}» (${x.e.empresa}): ${x.e.texto}`).join('\n')
+    : '';
+
+  const hist = historial.length
+    ? `\n\nLA CONVERSACIÓN HASTA AHORA (la última línea es lo que te pide ahora):\n`
+      + historial.map(m=>`[${m.rol==='tu'?'ÍÑIGO':'TU RESPUESTA ANTERIOR'}] ${m.texto}`).join('\n\n')
+    : '';
+
+  return `${REGLAS}
+
+PERFIL (datos reales, no salgas de aquí):
+${JSON.stringify(PERFIL)}
+
+OFERTA A LA QUE SE PRESENTA:
+${ofertaTxt(r)}${prec}${hist}
+
+PREGUNTA DEL FORMULARIO: ${pregunta}
+
+TAREA: Responde a esa pregunta en ${idioma}, como la respondería él. Reglas de este formato, además de las de arriba:
+- Es un CAMPO DE FORMULARIO, no un correo: sin saludo, sin despedida, sin firma y sin asunto.
+- Primera persona y prosa corrida. Nada de viñetas, salvo que la pregunta pida expresamente una lista.
+- Responde a lo que preguntan y nada más. Nadie lee un párrafo de calentamiento antes de la respuesta.
+- Si preguntan por algo que él NO tiene, dilo en la primera frase y sigue con lo más cercano que sí tiene. Sin adornarlo, sin insinuarlo y sin cambiar de tema.
+- Si piden una cifra o una fecha que no está en el PERFIL (pretensión salarial, disponibilidad, fecha de incorporación), NO te la inventes: escribe el hueco como [pendiente: lo que falte] para que lo rellene él. Si la oferta publica banda salarial, puedes referirte a ella.
+${limiteTxt}
+- Devuelve SOLO el texto de la respuesta.`;
+}
+
+function burbujaHTML(r, m, i){
+  if(m.rol==='tu'){
+    return `<div class="burb tu"><span class="quien">Tu pregunta</span>${esc(m.texto)}</div>`;
+  }
+  const L = lim(r.id), n = cuentaTexto(m.texto, L.unidad);
+  const pasa = L.n && n > L.n;
+  const enBanco = Object.values(BANCO).some(e=>e && e.texto===m.texto);
+  return `<div class="burb el"><span class="quien">Respuesta</span>${esc(m.texto)}
+    ${avisosHTML(validaTexto(m.texto, r, 'chat'))}
+    <div class="pie">
+      <span class="cuenta ${pasa?'pasa':''}">${n} ${L.unidad}${L.n?` de ${L.n}`:''}${pasa?' — se pasa':''}</span>
+      <button class="btn" data-ccopy="${r.id}" data-i="${i}" style="padding:4px 10px;font-size:12px">Copiar</button>
+      ${enBanco
+        ? `<span class="pt" style="font-size:12px">Guardada en el banco</span>`
+        : `<button class="btn" data-cbanco="${r.id}" data-i="${i}" style="padding:4px 10px;font-size:12px">Guardar en el banco</button>`}
+    </div></div>`;
+}
+
+function bancoHTML(r){
+  const filas = Object.entries(BANCO).filter(([,e])=>e && e.texto);
+  if(!filas.length) return '';
+  filas.sort((a,b)=>String(b[1].guardado||'').localeCompare(String(a[1].guardado||'')));
+  return `<details class="banco">
+    <summary>Banco de respuestas (${filas.length})</summary>
+    ${filas.map(([s,e])=>`<div class="bfila">
+      <p class="bq">${esc(e.pregunta)}</p>
+      <p class="bt">${esc(e.texto)}</p>
+      <div class="bmeta">${esc(e.empresa||'—')}${e.puesto?' · '+esc(e.puesto):''}${e.guardado?' · '+esc(String(e.guardado).slice(0,10)):''}
+        <button class="btn" data-bcopy="${esc(s)}" style="padding:3px 9px;font-size:11.5px;margin-left:8px">Copiar</button>
+        <button class="btn" data-bdel="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Borrar</button>
+      </div>
+    </div>`).join('')}
+  </details>`;
+}
+
+function panelChat(r){
+  const ms = mensajes(r.id);
+  const enCurso = CHAT[r.id];
+  const L = lim(r.id);
+  const ultimaPregunta = [...ms].reverse().find(m=>m.rol==='tu');
+  const prec = ultimaPregunta ? parecidasEnBanco(ultimaPregunta.texto, r.id) : [];
+
+  const hilo = ms.length
+    ? `<div class="chat" id="chat-${r.id}">
+        ${prec.length ? `<p class="precedente">Partiendo de lo que respondiste a «${esc(prec[0].e.pregunta)}» para ${esc(prec[0].e.empresa||'otra empresa')}.</p>` : ''}
+        ${ms.map((m,i)=>burbujaHTML(r,m,i)).join('')}
+        ${enCurso ? `<div class="burb el"><span class="quien">Respuesta</span><span id="chat-stream-${r.id}">${esc(enCurso.texto||'Pensando…')}</span>
+            <div class="pie"><span class="dot"></span><span class="pt" style="font-size:12px">Escribiendo…</span>
+            <button class="btn" data-ccancel="${r.id}" style="padding:4px 10px;font-size:12px">Cancelar</button></div></div>` : ''}
+      </div>`
+    : `<div class="vacio">
+        <p>Pega aquí una pregunta del formulario de esta candidatura y sale respondida con tu voz y tu perfil.</p>
+        <p class="hint">«¿Por qué te interesa este puesto?», «cuéntanos un proyecto del que estés orgulloso», «¿cuál es tu pretensión salarial?». Si la respuesta no te convence, se lo dices en el mismo hilo: más corta, menos formal, en inglés.</p>
+      </div>`;
+
+  return `${hilo}
+    <div class="compositor">
+      <textarea data-cpreg="${r.id}" placeholder="Pega la pregunta del formulario… (Ctrl+Intro para enviar)">${esc(BORRADOR[r.id]||'')}</textarea>
+      <div class="limrow">
+        <label for="lim-${r.id}">Límite del formulario</label>
+        <input id="lim-${r.id}" type="number" min="1" step="10" data-clim="${r.id}" value="${L.n==null?'':L.n}" placeholder="—">
+        <select data-cunidad="${r.id}" aria-label="Unidad del límite">
+          <option value="caracteres" ${L.unidad==='caracteres'?'selected':''}>caracteres</option>
+          <option value="palabras" ${L.unidad==='palabras'?'selected':''}>palabras</option>
+        </select>
+        <span class="sep"></span>
+        ${ms.length?`<button class="btn" data-cborra="${r.id}" style="padding:5px 11px;font-size:12px">Vaciar hilo</button>`:''}
+        <button class="btn primary" data-cenviar="${r.id}">Responder</button>
+      </div>
+    </div>
+    ${bancoHTML(r)}`;
+}
+
+async function enviarChat(id){
+  const r = DATA.find(x=>x.id===id); if(!r) return;
+  const ta = document.querySelector(`[data-cpreg="${id}"]`);
+  const pregunta = ((ta && ta.value) || BORRADOR[id] || '').trim();
+  if(!pregunta){ toast('Escribe la pregunta primero'); return; }
+  if(CHAT[id]){ toast('Espera a que termine la respuesta anterior'); return; }
+
+  if(!sampleTried){ sampleTried=true; try{ sampleNs = await claude.use('sample'); }catch(e){ sampleNs=null; } }
+  if(!sampleNs){ toast('La generación con Claude no está disponible en esta vista.'); return; }
+
+  const historial = mensajes(id);
+  const prec = parecidasEnBanco(pregunta, id);
+  await guardaChat(id, historial.concat([{rol:'tu', texto:pregunta, ts:new Date().toISOString()}]));
+  BORRADOR[id]=''; if(ta) ta.value='';
+
+  const ctrl = new AbortController();
+  CHAT[id] = {texto:'', ctrl};
+  TABS[id]='chat'; render();
+  const pinta = txt => {
+    const el=document.getElementById('chat-stream-'+id);
+    if(!el) return;
+    el.textContent=txt;
+    const cont=document.getElementById('chat-'+id);
+    if(cont) cont.scrollTop = cont.scrollHeight;
+  };
+  try{
+    const res = await sampleNs(promptChat(r, pregunta, historial, prec), {
+      modelTier:'default', signal:ctrl.signal, cache:false,
+      onText:({text})=>{ if(CHAT[id]){ CHAT[id].texto=text; pinta(text); } }
+    });
+    const texto=(res.text||'').trim();
+    delete CHAT[id];
+    if(!texto){ render(); toast('Claude no ha devuelto texto; vuelve a intentarlo'); return; }
+    await guardaChat(id, mensajes(id).concat([{rol:'el', texto, ts:new Date().toISOString()}]));
+    render();
+  }catch(e){
+    delete CHAT[id]; render();
+    const c = e && e.code;
+    if(c==='cancelled') return;
+    if(c==='not_granted') toast('No has dado permiso para generar con Claude');
+    else if(c==='rate_limited') toast('Demasiadas peticiones seguidas; espera un momento');
+    else toast('No se ha podido generar la respuesta');
+  }
+}
+
+async function guardaChat(id, ms){
+  DOCS[id] = Object.assign({}, DOCS[id], {chat:{mensajes:ms, actualizado:new Date().toISOString()}});
+  render();
+  if(!db) return;
+  try{ await db.doc('docs/'+id).set(DOCS[id]); }
+  catch(e){ toast('Respondido, pero no se ha podido guardar; cópialo antes de recargar'); }
+}
+
+async function guardarEnBanco(id, i){
+  const r = DATA.find(x=>x.id===id); if(!r) return;
+  const ms = mensajes(id), respuesta = ms[i];
+  if(!respuesta || respuesta.rol!=='el') return;
+  const pregunta = [...ms.slice(0,i)].reverse().find(m=>m.rol==='tu');
+  if(!pregunta){ toast('No encuentro a qué pregunta responde'); return; }
+  const slug = slugPregunta(pregunta.texto);
+  const entrada = {pregunta:pregunta.texto, texto:respuesta.texto, empresa:r.empresa,
+                   puesto:r.puesto, oferta:id, idioma:r.idioma,
+                   guardado:new Date().toISOString()};
+  BANCO = Object.assign({}, BANCO, {[slug]:entrada});
+  render();
+  if(!db){ toast('Guardada sólo en esta pestaña: no hay base de datos'); return; }
+  try{ await db.doc('respuestas/'+slug).set(entrada); toast('Guardada en el banco'); }
+  catch(e){ toast('No se ha podido guardar en el banco'); }
+}
+
+async function borrarDelBanco(slug){
+  const copia = Object.assign({}, BANCO); delete copia[slug]; BANCO = copia; render();
+  if(!db) return;
+  try{ await db.doc('respuestas/'+slug).delete(); toast('Borrada del banco'); }
+  catch(e){ toast('No se ha podido borrar del banco'); }
+}
+
+async function copiar(texto, mensajeOk){
+  if(!texto){ toast('No hay nada que copiar'); return; }
+  try{ await navigator.clipboard.writeText(texto); toast(mensajeOk||'Copiado al portapapeles'); }
+  catch(e){ toast('No se ha podido copiar; selecciona el texto a mano'); }
 }
 
 async function generar(id, kind){
@@ -1166,8 +1476,81 @@ function bind(){
     const id=b.dataset.for, which=b.dataset.tab;
     TABS[id]=which;
     b.parentElement.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
-    document.getElementById('pane-carta-'+id).hidden = which!=='carta';
-    document.getElementById('pane-mail-'+id).hidden  = which!=='mail';
+    ['carta','mail','chat'].forEach(k=>{
+      const pane=document.getElementById(`pane-${k}-${id}`);
+      if(pane) pane.hidden = which!==k;
+    });
+    if(which==='chat'){ const ta=document.querySelector(`[data-cpreg="${id}"]`); if(ta) ta.focus(); }
+  });
+
+  /* ---- Chat de respuestas ----
+     El compositor es un textarea que `render()` rehace entero, así que lo que
+     haya escrito se guarda en BORRADOR en cada tecla y se devuelve aquí con el
+     cursor donde estaba. El mismo problema y el mismo remedio que las notas. */
+  document.querySelectorAll('[data-cpreg]').forEach(ta=>{
+    const id=ta.dataset.cpreg;
+    ta.oninput=()=>{ BORRADOR[id]=ta.value; };
+    ta.onkeydown=e=>{
+      if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); enviarChat(id); }
+    };
+  });
+  /* `render()` rehace el hilo entero, así que la posición de lectura se pierde
+     en cada pintada. El hilo se queda «fijado» al final mientras él no suba a
+     releer; si sube, se respeta y se le devuelve donde estaba. El bucle de
+     frames existe porque la tipografía llega tarde: cuando llega, el texto
+     crece y lo que era el final deja de serlo. */
+  document.querySelectorAll('.chat').forEach(c=>{
+    const id=c.id.slice('chat-'.length);
+    const n=mensajes(id).length + (CHAT[id]?1:0);
+    if(VISTO[id]!==n){ VISTO[id]=n; FIJADO[id]=true; }      // mensaje nuevo: al final
+    if(FIJADO[id]!==false){
+      c.scrollTop=c.scrollHeight;
+      let intentos=0;
+      const baja=()=>{
+        if(!c.isConnected || FIJADO[id]===false) return;     // el nodo ya no es el de ahora
+        c.scrollTop=c.scrollHeight;
+        if(++intentos<5) requestAnimationFrame(baja);
+      };
+      requestAnimationFrame(baja);
+    } else if(SCROLL[id]!=null){
+      c.scrollTop=SCROLL[id];
+    }
+    c.onscroll=()=>{
+      const alFinal = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+      FIJADO[id] = alFinal;
+      SCROLL[id] = c.scrollTop;
+    };
+  });
+  document.querySelectorAll('[data-cenviar]').forEach(b=>b.onclick=()=>enviarChat(b.dataset.cenviar));
+  document.querySelectorAll('[data-ccancel]').forEach(b=>b.onclick=()=>{
+    const g=CHAT[b.dataset.ccancel];
+    if(g&&g.ctrl) g.ctrl.abort();
+    delete CHAT[b.dataset.ccancel]; render();
+  });
+  document.querySelectorAll('[data-ccopy]').forEach(b=>b.onclick=()=>{
+    const m=mensajes(b.dataset.ccopy)[+b.dataset.i];
+    copiar(m&&m.texto, 'Respuesta copiada');
+  });
+  document.querySelectorAll('[data-cbanco]').forEach(b=>b.onclick=()=>guardarEnBanco(b.dataset.cbanco, +b.dataset.i));
+  document.querySelectorAll('[data-bcopy]').forEach(b=>b.onclick=()=>{
+    const e=BANCO[b.dataset.bcopy]; copiar(e&&e.texto);
+  });
+  document.querySelectorAll('[data-bdel]').forEach(b=>b.onclick=()=>borrarDelBanco(b.dataset.bdel));
+  document.querySelectorAll('[data-cborra]').forEach(b=>b.onclick=()=>{
+    guardaChat(b.dataset.cborra, []);
+    toast('Hilo vaciado. Lo que hubieras guardado en el banco sigue ahí.');
+  });
+  document.querySelectorAll('[data-clim]').forEach(inp=>{
+    const id=inp.dataset.clim;
+    inp.onchange=()=>{
+      const n=parseInt(inp.value,10);
+      LIMITE[id]=Object.assign({}, lim(id), {n: (isFinite(n)&&n>0)?n:null});
+      render();
+    };
+  });
+  document.querySelectorAll('[data-cunidad]').forEach(sel=>{
+    const id=sel.dataset.cunidad;
+    sel.onchange=()=>{ LIMITE[id]=Object.assign({}, lim(id), {unidad:sel.value}); render(); };
   });
 }
 

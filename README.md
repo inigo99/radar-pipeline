@@ -188,6 +188,37 @@ puntuación sigue contándolo—, y `techo-imposible` avisa cuando el techo
 promete más de lo que la evidencia permite. Las dos existen para que el candado
 de `perfil.py` siga apoyándose en datos verdaderos.
 
+## Las preguntas de los formularios
+
+Casi ninguna candidatura se queda en «adjunta tu CV». Hay tres o cuatro campos
+de texto libre —por qué nosotros, un proyecto del que estés orgulloso,
+pretensión salarial— que se acaban respondiendo a las once de la noche y suenan
+a plantilla, o peor, prometen algo que no está en el CV.
+
+Dentro de cada oferta, la pestaña **«Respuestas»** es un chat: pegas la pregunta
+tal y como viene del formulario y sale respondida con el perfil real, el
+contexto de esa oferta y el mismo perfil de voz que la carta. Si no encaja se lo
+dices en el mismo hilo —«más corto», «menos formal», «en inglés»— en vez de
+regenerar desde cero. El hilo se guarda en `docs/<id>`, junto a la carta y el
+correo.
+
+Tres cosas lo separan de la carta:
+
+| | |
+|---|---|
+| **El límite manda** | Los formularios cortan a 500 caracteres o a 150 palabras sin avisar. El límite se fija por oferta, entra en el prompt y el contador está a la vista, en rojo cuando se pasa. |
+| **El banco** | Las preguntas se repiten entre empresas. Una respuesta que te gusta se guarda en la colección `respuestas`, y la siguiente vez que alguien pregunte algo parecido entra en el contexto como precedente: se adapta, no se reescribe de cero. El parecido se mide por solape de palabras, quitando las que salen en toda pregunta («cuéntanos», «por qué», «describe»), y nunca contra la propia oferta. |
+| **Pasa por el validador** | Una respuesta de formulario es justo donde más fácil se cuela una cifra inventada, así que se revisa igual que la carta. La única comprobación que se salta es la de nombrar a la empresa: media docena de preguntas no van de ellos. |
+
+Dos reglas propias de este modo, además de las de siempre: es un **campo de
+formulario**, así que no lleva saludo, despedida ni firma; y si piden una cifra
+o una fecha que no está en el perfil —pretensión salarial, disponibilidad—
+**no se la inventa**: deja un `[pendiente: …]` para que lo rellenes tú. Si la
+oferta publica banda, puede referirse a ella.
+
+El banco vive sólo en la base de datos y en la página: el pipeline no lo lee ni
+lo escribe, así que no hay nada nuevo que volcar en la tarea diaria.
+
 ## El validador de la carta y el correo
 
 El candado protege el CV, pero la carta y el correo salían del modelo directos
@@ -201,7 +232,7 @@ es ese «casi»: compara el texto ya escrito con el perfil real y con la oferta.
 | Tecnología | Un término con evidencia 0 nombrado en el texto. |
 | Años | «5 años» dicho como propio cuando el CV suma 3,2. |
 | Estilo | Las fórmulas prohibidas en tus propias reglas: «sinergia», «no dudes en», «Estimado/a»… |
-| Formato | Que nombre a la empresa; que el correo empiece por asunto y lleve el marcador `[nombre]`. |
+| Formato | Que nombre a la empresa (salvo en las respuestas de formulario), y que el correo empiece por asunto y lleve el marcador `[nombre]`. |
 
 **No bloquea nada, señala.** Nombrar un hueco es correcto —es lo que pide el
 prompt— y citar la banda de la oferta también, así que la decisión sigue siendo

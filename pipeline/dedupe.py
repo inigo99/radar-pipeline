@@ -6,18 +6,36 @@ están en LinkedIn **y** en InfoJobs. Hasta ahora esto se hacía a ojo o con un
 script improvisado cada mañana, que es la clase de cosa que funciona hasta que
 no. Aquí vive ya escrito, con las trampas dentro.
 
-Tres pasadas, de la más barata a la más cara:
+Cuatro pasadas, de la más barata a la más cara:
 
-  1. **Por id.** Ya está en `ofertas`, en `pipeline/cerradas` o tiene
-     seguimiento en `estado`.
-  2. **Por huella.** Empresa y puesto normalizados: sin acentos, sin
-     mayúsculas, sin sufijos de sociedad («S.L.», «GmbH», «Ltd»), sin el ruido
-     de los títulos («(m/f/d)», «100% remoto», «- Madrid»).
-  3. **Por solape de tokens del título**, y sólo dentro de la misma empresa.
+  1. **Por id**, tolerando el hash truncado de InfoJobs. Ya está en `ofertas`,
+     en `pipeline/cerradas` o tiene seguimiento en `estado`.
+  2. **Por URL**, cuando la candidata trae `url`/`url_apply`: coincidencia
+     exacta con la de una oferta ya conocida.
+  3. **Por huella.** Empresa y puesto normalizados: sin acentos, sin
+     mayúsculas, sin sufijos de sociedad («S.L.», «GmbH», «Ltd», «Banco»),
+     sin el ruido de los títulos («(m/f/d)», «100% remoto», «- Madrid»).
+  4. **Por solape de tokens del título**, y sólo dentro de la misma empresa.
 
 **Nunca por subcadena.** Es la regla que impide que «Alan» case con «Talan» o
 «UST» con «Braintrust». Comparar cadenas por `in` parece razonable durante diez
 minutos y luego se come ofertas buenas en silencio.
+
+**Trampas conocidas (16-sep-2026):**
+
+- El hash de InfoJobs se ha guardado con longitudes distintas según el día
+  (8 caracteres unas veces, 10 otras). Una comparación exacta de `id` deja
+  pasar duplicados reales — pasó con Sopra Steria, que entró dos veces
+  disfrazada de dos ids distintos del mismo hash. Por eso el paso 1 compara
+  ids `ij-*` por prefijo compartido (mínimo 8 caracteres), no por igualdad.
+- «Banco Santander» y «Grupo Santander» son la misma empresa dicha de dos
+  formas: la primera se cuela porque «banco» no estaba en
+  `SUFIJOS_SOCIEDAD`. Ya está añadido, pero si aparece otra forma jurídica
+  nueva («Caja», «Mutua»…) que no se esté recortando, este es el sitio.
+- Ninguna de las dos trampas anteriores la coge el solape de tokens del
+  título por sí solo (el Jaccard entre «databricks» y «databricks banca»
+  es 0,67, por debajo del umbral 0,75) — de ahí que el chequeo por URL vaya
+  primero: cuando existe, es la señal más barata y más fiable de todas.
 
 Uso:
 
@@ -50,6 +68,9 @@ SUFIJOS_SOCIEDAD = {
     "group", "grupo", "holding", "holdings", "iberia", "spain", "espana",
     "technologies", "technology", "tech", "solutions", "consulting",
     "consultores", "consultoria", "services", "servicios", "digital",
+    # «Banco Santander» / «Grupo Santander»: la misma empresa, dos maneras
+    # de nombrarla que sin esto no casaban (bug del 16-sep-2026).
+    "banco",
 }
 
 #: Palabras que no distinguen una vacante de otra. Se quitan del título antes
@@ -129,13 +150,38 @@ def solape(a, b):
     return len(a & b) / float(len(a | b))
 
 
+def _url_de(oferta):
+    return oferta.get("url_apply") or oferta.get("url") or None
+
+
 def _indice(conocidas):
     """Prepara lo ya conocido para consultarlo sin recorrerlo entero cada vez."""
-    por_huella, por_empresa = {}, {}
+    por_huella, por_empresa, por_url = {}, {}, {}
     for o in conocidas:
         por_huella.setdefault(huella(o), o)
         por_empresa.setdefault(normaliza_empresa(o.get("empresa")), []).append(o)
-    return por_huella, por_empresa
+        u = _url_de(o)
+        if u:
+            por_url.setdefault(u, o)
+    return por_huella, por_empresa, por_url
+
+
+def _id_conocido(cid, ids_conocidos, ids_ij):
+    """Ids conocidos, tolerando el hash de InfoJobs truncado a longitudes
+    distintas según el día (ver «Trampas conocidas» arriba). `ids_ij` es el
+    subconjunto de `ids_conocidos` que empieza por «ij-», precalculado una
+    vez porque esta comprobación se hace candidata por candidata."""
+    if cid in ids_conocidos:
+        return cid
+    if not cid or not cid.startswith("ij-"):
+        return None
+    h = cid[3:]
+    for k in ids_ij:
+        hk = k[3:]
+        n = min(len(h), len(hk))
+        if n >= 8 and h[:n] == hk[:n]:
+            return k
+    return None
 
 
 def _etiqueta(o):
@@ -150,14 +196,23 @@ def dedupe(candidatas, conocidas=(), ids_vetados=()):
     """
     vetados = set(ids_vetados)
     ids_conocidos = {o.get("id") for o in conocidas} | vetados
-    por_huella, por_empresa = _indice(conocidas)
+    ids_ij = {k for k in ids_conocidos if k and k.startswith("ij-")}
+    por_huella, por_empresa, por_url = _indice(conocidas)
 
     supervivientes, duplicadas = [], []
     for cand in candidatas:
         cid = cand.get("id")
 
-        if cid in ids_conocidos:
-            duplicadas.append(dict(oferta=cand, motivo="id ya conocido", contra=cid))
+        choque_id = _id_conocido(cid, ids_conocidos, ids_ij)
+        if choque_id is not None:
+            motivo = "id ya conocido" if choque_id == cid else "mismo hash de InfoJobs, truncado distinto"
+            duplicadas.append(dict(oferta=cand, motivo=motivo, contra=choque_id))
+            continue
+
+        cand_url = _url_de(cand)
+        if cand_url and cand_url in por_url:
+            duplicadas.append(dict(oferta=cand, motivo="misma URL",
+                                   contra=_etiqueta(por_url[cand_url])))
             continue
 
         h = huella(cand)
@@ -184,6 +239,10 @@ def dedupe(candidatas, conocidas=(), ids_vetados=()):
         # pasen los dos.
         supervivientes.append(cand)
         ids_conocidos.add(cid)
+        if cid and cid.startswith("ij-"):
+            ids_ij.add(cid)
+        if cand_url:
+            por_url[cand_url] = cand
         por_huella[h] = cand
         por_empresa.setdefault(empresa, []).append(cand)
 
@@ -208,15 +267,45 @@ def conocidas_de_data():
 
 
 def _auditar():
-    """Duplicados que ya están dentro de `ofertas`. Sólo informa, no borra."""
+    """Duplicados que ya están dentro de `ofertas`. Sólo informa, no borra.
+
+    Usa las mismas tres señales que `dedupe()` sobre las candidatas nuevas
+    (id/hash con tolerancia de truncado, URL, huella): un par que sólo
+    coincide por huella pero no por URL —«Data Engineer (Databricks)» vs.
+    «Data Engineer (Databricks, Banca)»— seguía sin verse antes de esto."""
     ofertas = _leer("ofertas.json", [])
-    vistos, choques = {}, []
+    vistos_id, vistos_ij, vistos_url, vistos_huella = {}, {}, {}, {}
+    choques = []
     for o in ofertas:
-        h = huella(o)
-        if h in vistos:
-            choques.append((vistos[h], o))
-        else:
-            vistos[h] = o
+        oid = o.get("id")
+        pareja = None
+        if oid in vistos_id:
+            pareja = vistos_id[oid]
+        elif oid and oid.startswith("ij-"):
+            h = oid[3:]
+            for k, otra in vistos_ij.items():
+                n = min(len(h), len(k))
+                if n >= 8 and h[:n] == k[:n]:
+                    pareja = otra
+                    break
+        if pareja is None:
+            u = _url_de(o)
+            if u and u in vistos_url:
+                pareja = vistos_url[u]
+        if pareja is None:
+            h = huella(o)
+            if h in vistos_huella:
+                pareja = vistos_huella[h]
+        if pareja is not None:
+            choques.append((pareja, o))
+        if oid:
+            vistos_id[oid] = o
+            if oid.startswith("ij-"):
+                vistos_ij[oid[3:]] = o
+        u = _url_de(o)
+        if u:
+            vistos_url[u] = o
+        vistos_huella[huella(o)] = o
     print(f"{len(ofertas)} ofertas en el radar, {len(choques)} pares duplicados.")
     for a, b in choques:
         print(f"  · {_etiqueta(a)}\n    {_etiqueta(b)}")

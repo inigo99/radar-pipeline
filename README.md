@@ -83,14 +83,29 @@ ya resuelto, para no volver a derivarlo —ni a romperlo— cada mañana:
 | `common.js` | normalización, HTML a texto, clasificación de modalidad y ámbito, filtro de títulos, tandas con pausa y reintento de `429` |
 | `linkedin.js` | endpoint de invitado, parseo por `<li>`, criba y fichas |
 | `infojobs.js` | listado por regex sobre el HTML crudo, recorte de la descripción, fichas |
+| `manfred.js` | API JSON pública de Manfred: salario, `remotePercentage` y técnicas con nivel ya estructurados, sin parseo de HTML |
 | `vocabulario.js` | diccionario término → regex para redactar los `reqs` |
-| `bundle.min.js` | los tres primeros, concatenados y minificados |
+| `bundle.min.js` | los tres primeros (común + LinkedIn + InfoJobs), concatenados y minificados |
+
+**Manfred no necesita subagente.** Como usa una API JSON en vez de HTML, no
+tiene el coste que justifica pegar código en una pestaña sólo por LinkedIn e
+InfoJobs — pero sí necesita el navegador (el proxy de salida de la nube
+bloquea `getmanfred.com` igual que bloquea el resto), así que va en el hilo
+principal, junto a JSearch, nunca en el subagente de Tecnoempleo/Indeed:
+ese subagente no tiene navegador y Manfred se queda sin cubrir si se le
+delega ahí (pasó el 16-sep-2026).
 
 ### Cómo se cargan (y por qué no hay caché)
 
 **Se pegan como código** en una llamada a `javascript_tool` al empezar con cada
 dominio, y quedan en `window.__radar` para el resto de la sesión de esa pestaña.
-Unos 10 KB, una vez por dominio y ejecución.
+Unos 10 KB, una vez por dominio y ejecución. Para LinkedIn e InfoJobs, carga
+también `vocabulario.js` desde el principio (junto con `common.js` y
+`linkedin.js`/`infojobs.js`): desde el 16-sep-2026 `detallar()` saca los
+términos del vocabulario en la misma pasada que la modalidad, así que cada
+ficha se pide una sola vez en toda la ejecución — antes se pedía dos, una para
+filtrar (paso 4) y otra para escribir los `reqs` (paso 6), literalmente el
+mismo HTML descargado dos veces.
 
 Se probaron tres atajos el 9 de septiembre de 2026 y **los tres fallan en
 linkedin.com**; no vuelvas a intentarlos:
@@ -141,13 +156,25 @@ cuesta la configuración y se puede cambiar con conocimiento de causa.
 
 La misma vacante llega con ids distintos desde portales distintos, y muchas
 están en LinkedIn **y** en InfoJobs. `pipeline/dedupe.py` hace esa criba
-siempre igual, en tres pasadas: por id, por huella de empresa y puesto
-normalizados (sin acentos, sin `S.L.`, sin `(m/f/d)`) y por solape de tokens
-del título dentro de la misma empresa.
+siempre igual, en cuatro pasadas: por id (tolerando el hash truncado de
+InfoJobs), por URL cuando la candidata la trae, por huella de empresa y
+puesto normalizados (sin acentos, sin `S.L.`, sin `Banco`/`Grupo`, sin
+`(m/f/d)`) y por solape de tokens del título dentro de la misma empresa.
 
 **Nunca por subcadena.** Es la regla que impide que «Alan» case con «Talan» o
 «UST» con «Braintrust». Comparar con `in` parece razonable diez minutos y luego
 se come ofertas buenas en silencio.
+
+**El id de InfoJobs se truncó a longitudes distintas según el día** (8
+caracteres unas veces, 10 otras), y una comparación exacta dejó pasar una
+oferta de Sopra Steria que ya estaba, dos veces, con dos ids del mismo hash
+(16-sep-2026). El paso 1 ahora compara los ids `ij-*` por prefijo compartido
+en vez de por igualdad, así que el bug no depende de que nadie vuelva a
+truncar bien — pero al escribir un id nuevo en el paso 6, usa siempre
+`ij.idPara(o)` (`browser/infojobs.js`), que fija la longitud en 12
+caracteres, para no depender de esa tolerancia. La misma ejecución coló
+«Grupo Santander» junto a «Banco Santander» como si fueran dos empresas: por
+eso `Banco` está ahora en `SUFIJOS_SOCIEDAD`.
 
     python pipeline/dedupe.py candidatas.json nuevas.json   # criba un lote
     python pipeline/dedupe.py --auditar                     # duplicados ya dentro

@@ -1,9 +1,27 @@
 # -*- coding: utf-8 -*-
-import os, sys, json
+import os, re, sys, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tailor import T
 
 RES = json.load(open('data/resultado.json'))
+
+# Candado anti-«Senior» (16 sep 2026): a Íñigo no le corresponde presentarse
+# como sénior todavía, así que se quita del titular pase lo que pase, aunque
+# el título del anuncio lo lleve o se cuele en `tailor`. Es determinista, no
+# depende de que la tarea diaria se acuerde de evitarlo, y limpia también las
+# ofertas ya cargadas la próxima vez que se regenera el dashboard.
+_SENIOR_RE = re.compile(r'(?i)\b(senior|s[eé]nior|sr\.?)\b')
+
+
+def _limpia_titular(t):
+    if not t:
+        return t
+    t = _SENIOR_RE.sub('', t)
+    t = re.sub(r'\(\s*\)', '', t)                  # paréntesis que quedan vacíos
+    t = re.sub(r'\s{2,}', ' ', t)                   # huecos dobles
+    t = re.sub(r'^[\s/\-·]+|[\s/\-·]+$', '', t)     # separador colgante al inicio/final
+    t = re.sub(r'\s*/\s*/\s*', ' / ', t)            # doble barra si el hueco caía entre dos
+    return t.strip()
 
 
 def _opcional(nombre, defecto):
@@ -26,8 +44,9 @@ for r in RES:
       salMin=r['sal_min'], salMax=r['sal_max'], salMedio=r['sal_medio'], salOrigen=r['sal_origen'],
       salBase=r['sal_base'], url=r['url'], scoreOrig=r['score_orig'], scoreAdap=r['score_adap'],
       delta=r['delta'], mejora=r['mejora_pct'], fuertes=r['fuertes'], huecos=r['huecos'],
-      alerta=r.get('alerta',''), titular=T[r['id']]['titular'],
+      alerta=r.get('alerta',''), titular=_limpia_titular(T[r['id']]['titular']),
       resumen=T[r['id']]['resumen'], familia=T[r['id']]['familia'],
+      skillsExtra=T[r['id']].get('skills_extra') or '',
       reqs=[f"{l} (peso {w})" for _,w,l in sorted(r['reqs'], key=lambda x:-x[1])[:12]],
       zona=('local' if ('Navarra' in r['modalidad'] or 'Gipuzkoa' in r['modalidad']) else 'remoto'),
       ambito=r['ambito'],
@@ -1792,6 +1811,15 @@ function cvBloques(r, FS){
 
   h2(L.skills);
   for(const s of skCfg.orden) bl.push({s:SK[s], size:FS, f:'TR', mb:2*PX});
+  /* Tecnologías propias de ESTA oferta que la variante de familia no saca por
+     defecto (p.ej. React en una oferta de AI agent engineer). Viene de
+     `tailor/<id>.skills_extra`, escrito a mano por oferta y sujeto al mismo
+     candado anti-invención que el resto del CV: sólo tecnologías que ya
+     tiene, nunca inventadas. Vacío para las ofertas que no lo necesiten. */
+  if(r.skillsExtra) bl.push({
+    s:(idi==='en' ? 'Also relevant for this role: ' : 'También relevante para esta oferta: ')+r.skillsExtra,
+    size:FS, f:'TR', mb:2*PX, just:true
+  });
 
   h2(L.lid);
   bl.push({s:L.lid_txt, size:FS, f:'TR', mb:3.5*PX, just:true});

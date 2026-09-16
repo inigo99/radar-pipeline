@@ -67,6 +67,22 @@ from base_cv import (BULLETS_ES, BULLETS_EN, SKILLS_ES, SKILLS_EN, CONTACTO,
                       ORDEN, ORDEN_SKILLS, CV_LABELS, PERFIL_LLM,
                       TFM_VARIANT, TFG_VARIANT)
 from datos import PERFIL as _PERFIL_DOC
+
+# Añadir oferta a mano (16 sep 2026): el botón "+" del dashboard reconstruye,
+# en el navegador y con la capacidad `sample`, el mismo trabajo que hoy hace
+# la tarea diaria a mano en el Paso 6 -- reqs, familia, titular/resumen,
+# salario si falta. Para que no diverja de las reglas reales, estas tablas se
+# incrustan tal cual desde su fuente en el repo, no se retipean en JS:
+# `pipeline/aprendizaje.py` (prioridad por familia y dificultad de huecos),
+# `pipeline/foco.py` (antigüedad/sénior) y `pipeline/bandas.json` (salario
+# estimado). Si esos ficheros cambian, el dashboard los recoge solo en la
+# siguiente publicación.
+from aprendizaje import PESO_FAMILIA, PESO_FAMILIA_DEFECTO, DIFICULTAD, DEFECTO as DIFICULTAD_DEFECTO
+from foco import SENIOR as _SENIOR_RE_FOCO, FRESCURA, PENALIZACION_SENIOR, BONUS_SALARIO_PUBLICADO
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vocabulario.md'), encoding='utf-8') as _fh:
+    VOCABULARIO_MD = _fh.read()
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bandas.json'), encoding='utf-8') as _fh:
+    BANDAS = _fh.read()  # ya es JSON válido tal cual; se pasa sin retocar
 from experiencia import anios_perfil, MARGEN_DEF
 
 # Los años de experiencia del CV, sumados de las fechas de sus puestos. Se
@@ -415,7 +431,10 @@ footer b{color:var(--ink-2);font-weight:600}
       <p class="eyebrow">Actualizado el __FECHA__ · __N__ ofertas en el radar</p>
       <h1>Radar de ofertas</h1>
     </div>
-    <button class="cfgbtn" id="cfgbtn">Configuración</button>
+    <div style="display:flex;gap:8px;flex:none;margin-top:6px">
+      <button class="cfgbtn" id="nuevabtn" title="Añadir una oferta a mano" aria-label="Añadir oferta">+ Oferta</button>
+      <button class="cfgbtn" id="cfgbtn">Configuración</button>
+    </div>
   </div>
   <p class="sub">Ofertas recientes que encajan con tu perfil: 100&nbsp;% remoto desde España o desde el extranjero, y presencial o híbrido en Navarra y Gipúzcoa. Rastreadas en LinkedIn, InfoJobs, JSearch (Google for Jobs), Tecnoempleo, Indeed y los portales de empleo remoto. El CV adaptado, la cover letter y el correo a RRHH se generan desde dentro de la oferta, con un botón, sólo para las que te interesen. Pulsa cualquier fila para abrirla, o «Configuración» para cambiar qué se busca: la tarea diaria lo lee antes de cada ejecución.</p>
 </header>
@@ -477,6 +496,7 @@ footer b{color:var(--ink-2);font-weight:600}
 </footer>
 </div>
 <div id="cfgmodal"></div>
+<div id="nuevamodal"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -490,6 +510,17 @@ const ANIOS_PERFIL = __ANIOS_PERFIL__;   // años de experiencia sumados de su C
 const MARGEN_DEF = __MARGEN_DEF__;
 const LINT = __LINT__;                   // banderas rojas del CV base (pipeline/lint.py)
 const EVIDENCIA = __EVIDENCIA__;         // término -> 0 / 0.5 / 1.0, para validar lo generado
+const TECHO = __TECHO__;                 // término -> techo si se saca a un bullet (perfil.py)
+const PESO_FAMILIA = __PESO_FAMILIA__;   // aprendizaje.py: empuje de IA/DS en el orden por defecto
+const PESO_FAMILIA_DEFECTO = __PESO_FAMILIA_DEFECTO__;
+const DIFICULTAD = __DIFICULTAD__;       // aprendizaje.py: nivel/nota de cada hueco posible
+const DIFICULTAD_DEFECTO = __DIFICULTAD_DEFECTO__;
+const SENIOR_RE_FOCO = new RegExp(__SENIOR_RE_FOCO__, 'i');   // foco.py
+const FRESCURA = __FRESCURA__;                                 // foco.py
+const PENALIZACION_SENIOR = __PENALIZACION_SENIOR__;           // foco.py
+const BONUS_SALARIO_PUBLICADO = __BONUS_SALARIO_PUBLICADO__;   // foco.py
+const VOCABULARIO_MD = __VOCABULARIO_MD__;   // pipeline/vocabulario.md, para el prompt de extracción
+const BANDAS = __BANDAS__;                   // pipeline/bandas.json, para estimar salario
 const FAMILIA_ES = {genai:'GenAI / LLM', ml:'Machine Learning', cv:'Computer Vision',
   ds:'Data Science / Eng.', mlops:'MLOps', backend:'Full Stack / Backend', research:'Investigación',
   general:'General / Perfil abierto'};
@@ -538,6 +569,7 @@ const OBJ_DEF=10;   // candidaturas por semana; se cambia desde la pestaña «Ho
 let STATE={}, DOCS={}, CORREO={}, BANCO={}, db=null, dbListo=false, dbFallo=false;
 let CFG=Object.assign({},CFG_DEF), cfgAbierta=false, cfgGuardando=false;
 let sampleNs=null, sampleTried=false;
+let nuevaAbierta=false, nuevaGuardando=false, nuevaMsg='', MANUAL={};
 const GEN={};   // id -> {carta:{texto,estado},mail:{...}} en curso
 const CHAT={};      // id -> {texto, ctrl} de la respuesta que se está escribiendo
 const BORRADOR={};  // id -> lo que hay escrito en el compositor, que render() borraría
@@ -585,6 +617,20 @@ async function initEstado(){
     snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
     STATE=nuevo; dbListo=true; lsGuardar(); render();
   }, e=>{ dbFallo=true; dbListo=true; render(); });
+  /* Ofertas añadidas a mano con el botón "+" (16 sep 2026). `DATA` es una
+     constante horneada en la última publicación: esto es el puente hasta que
+     la tarea de mañana la recoja de verdad en `ofertas`/`tailor` y la
+     publicación de mañana la hornee dentro de `DATA`. A partir de ahí este
+     documento sobra pero no molesta -- `fila()` no vuelve a tocar un id que
+     ya está en `DATA`. */
+  db.collection('manual').onSnapshot(snap=>{
+    snap.docs.forEach(d=>{
+      const v=d.data(); if(!v) return;
+      MANUAL[d.id]=v;
+      if(!DATA.some(r=>r.id===d.id)) DATA.push(v);
+    });
+    render();
+  }, e=>{});
 }
 
 let guardando=0;
@@ -796,6 +842,385 @@ async function guardaCfg(){
   }
 }
 
+/* ============================================================
+   Añadir oferta a mano (botón "+", 16 sep 2026)
+   ============================================================
+   El botón "+" reconstruye en el navegador, con la capacidad `sample`, el
+   mismo trabajo que la tarea diaria hace a mano en su Paso 6: sacar `reqs`
+   del anuncio, elegir familia, escribir titular/resumen y, si falta,
+   estimar el salario. Para no reinventar (ni desincronizar) las reglas
+   reales, las tablas que gobiernan ese trabajo -- vocabulario.md,
+   bandas.json, aprendizaje.py, foco.py -- llegan tal cual desde el propio
+   repo (ver el Python que arma esta página) en vez de retipearse aquí.
+
+   El candado anti-invención de siempre se aplica DOS VECES: primero en el
+   prompt (le decimos a Claude las mismas reglas que sigue el resto del
+   dashboard), y después EN CÓDIGO sobre lo que devuelve, exactamente igual
+   que ya hace `perfil.py` con el CV determinista: `surfaced` y
+   `skills_extra` se filtran contra `EVIDENCIA` pase lo que pase en el JSON,
+   así que un fallo del modelo no puede colar algo que no tiene. */
+
+const RE_SENIOR_TITULAR = /\b(senior|s[eé]nior|sr\.?)\b/ig;
+function limpiaTitular(t){
+  if(!t) return t;
+  t = t.replace(RE_SENIOR_TITULAR,'');
+  t = t.replace(/\(\s*\)/g,'');
+  t = t.replace(/\s{2,}/g,' ');
+  t = t.replace(/^[\s/\-·]+|[\s/\-·]+$/g,'');
+  t = t.replace(/\s*\/\s*\/\s*/g,' / ');
+  return t.trim();
+}
+
+function pesoFamilia(familia){
+  return PESO_FAMILIA[familia] != null ? PESO_FAMILIA[familia] : PESO_FAMILIA_DEFECTO;
+}
+
+function diasDesde(publicada){
+  if(!publicada) return null;
+  const d = new Date(String(publicada).slice(0,10)+'T00:00:00');
+  if(isNaN(d.getTime())) return null;
+  return Math.round((Date.now()-d.getTime())/86400000);
+}
+function frescura(dias){
+  if(dias==null) return [1.0,''];
+  for(const par of FRESCURA){ if(dias<=par[0]) return [par[1],par[2]]; }
+  const ult = FRESCURA[FRESCURA.length-1];
+  return [ult[1], ult[2]];
+}
+/* Puerto de pipeline/foco.py: antigüedad y títulos de sénior restan sobre
+   `prioridad`, nunca sobre `scoreAdap` -- ver la cabecera de ese fichero. */
+function calculaFoco(puesto, publicada, salOrigen, prioridad){
+  const dias = diasDesde(publicada);
+  const fr = frescura(dias);
+  let factor = fr[0];
+  const motivos = fr[1] ? [fr[1]] : [];
+  if(SENIOR_RE_FOCO.test(puesto||'')){
+    factor *= PENALIZACION_SENIOR;
+    motivos.push('el título pide un perfil sénior o de arquitecto');
+  }
+  if(salOrigen==='publicado'){
+    factor *= BONUS_SALARIO_PUBLICADO;
+    motivos.push('publica la banda salarial');
+  }
+  return { foco: Math.round(prioridad*factor*10)/10, dias, motivoFoco: motivos.join('; ') };
+}
+
+/* Puerto de pipeline/perfil.py: la prominencia adaptada NUNCA sube de 0 si
+   no hay evidencia real, esté o no en `surfaced`. */
+function prominenciaAdaptada(k, surfacedSet){
+  const base = EVIDENCIA[k] || 0;
+  if(base === 0) return 0;
+  if(surfacedSet.has(k)) return Math.max(base, TECHO[k] != null ? TECHO[k] : base);
+  return base;
+}
+/* Puerto de pipeline/puntuar.py: score(). `reqs` es [[clave,peso,etiqueta],...]. */
+function puntuarOferta(reqs, surfaced){
+  const surfacedSet = new Set(surfaced||[]);
+  const tot = reqs.reduce((a,r)=>a+r[1], 0) || 1;
+  const orig = reqs.reduce((a,r)=>a+r[1]*(EVIDENCIA[r[0]]||0), 0);
+  const adap = reqs.reduce((a,r)=>a+r[1]*prominenciaAdaptada(r[0],surfacedSet), 0);
+  const huecos = reqs.filter(r=>(EVIDENCIA[r[0]]||0)===0).sort((a,b)=>b[1]-a[1]).map(r=>r[2]);
+  const fuertes = reqs.filter(r=>(EVIDENCIA[r[0]]||0)>=0.7).sort((a,b)=>b[1]-a[1]).map(r=>r[2]);
+  return {
+    scoreOrig: Math.round(1000*orig/tot)/10,
+    scoreAdap: Math.round(1000*adap/tot)/10,
+    huecos: huecos.slice(0,5), fuertes: fuertes.slice(0,5),
+  };
+}
+/* Puerto de pipeline/aprendizaje.py: brecha_aprendizaje(). Sólo informativo:
+   nunca toca el CV ni la carta, sólo el panel de huecos de la ficha. */
+function brechaAprendizaje(reqs){
+  const items = reqs.filter(r=>(EVIDENCIA[r[0]]||0)===0).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  return items.map(r=>{
+    const dif = DIFICULTAD[r[0]] || DIFICULTAD_DEFECTO;
+    return {clave:r[0], etiqueta:r[2], peso:r[1], nivel:dif[0], nota:dif[1]};
+  });
+}
+/* Puerto de pipeline/bandas.json ("como_usar"): banda por familia y tipo de
+   empresa, por el factor del país de contratación, con hasta dos ajustes, y
+   redondeo a millares. Claude sólo clasifica (familia ya la decide él mismo,
+   tipo de empresa y país los devuelve en "salario"); la aritmética, y por
+   tanto la cifra final, sale siempre de aquí, nunca de lo que diga el texto. */
+function estimaSalario(familia, tipoEmpresa, pais, ajustes){
+  const bandaFam = BANDAS.bandas[familia] || BANDAS.bandas.general;
+  const banda = bandaFam[tipoEmpresa] || bandaFam.producto_espana;
+  const paisInfo = BANDAS.paises[pais] || BANDAS.paises.espana;
+  let f = paisInfo.factor;
+  const notasAj = [];
+  (ajustes||[]).slice(0,2).forEach(k=>{
+    const aj = BANDAS.ajustes[k];
+    if(aj){ f *= aj.factor; notasAj.push(aj.nota); }
+  });
+  const salMin = Math.round(banda[0]*f/1000)*1000;
+  const salMax = Math.round(banda[1]*f/1000)*1000;
+  const tipoTxt = BANDAS.tipos_empresa[tipoEmpresa] ? tipoEmpresa : (tipoEmpresa||'sin clasificar');
+  let base = `Estimado (no publicado): familia ${familia}, tipo de empresa ${tipoTxt}, `
+           + `país de contratación ${pais||'espana'} (factor ${paisInfo.factor})`;
+  if(notasAj.length) base += `, ajustes: ${notasAj.join(' / ')}`;
+  base += '. Redondeado a millares -- ver pipeline/bandas.json.';
+  return {salMin, salMax, salBase: base};
+}
+
+const normTxt = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+/* `skills_extra` sujeto al mismo candado que el resto del CV: sólo entra un
+   término si aparece de verdad en ALGUNA variante de skills_es/skills_en del
+   perfil real, nunca porque el anuncio lo pida. Ver vocabulario.md. */
+function filtraSkillsExtra(txt){
+  if(!txt) return '';
+  const bolsas = [];
+  ['skills_es','skills_en'].forEach(idi=>{
+    const variantes = CV[idi]||{};
+    Object.keys(variantes).forEach(v=>{
+      const cats = variantes[v]||{};
+      Object.keys(cats).forEach(c=>bolsas.push(String(cats[c]||'')));
+    });
+  });
+  const blob = normTxt(bolsas.join(' | '));
+  const terms = String(txt).split(',').map(s=>s.trim()).filter(Boolean);
+  return terms.filter(t=>t && blob.includes(normTxt(t))).slice(0,4).join(', ');
+}
+
+function parseaJSON(texto){
+  if(!texto) return null;
+  let t = String(texto).trim();
+  const bloque = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if(bloque) t = bloque[1].trim();
+  const ini = t.indexOf('{'), fin = t.lastIndexOf('}');
+  if(ini<0 || fin<ini) return null;
+  try{ return JSON.parse(t.slice(ini, fin+1)); }catch(e){ return null; }
+}
+
+function promptExtraccion(o){
+  return `Estás ayudando a Íñigo a dar de alta a mano, en su propio radar de búsqueda de empleo, una
+oferta que él ya ha leído fuera del sistema. Sigue exactamente el mismo criterio que su tarea
+automática diaria: el vocabulario y las bandas salariales de abajo son la única fuente de verdad,
+no inventes una clave nueva si ya existe una parecida.
+
+PERFIL (datos reales -- nunca le atribuyas nada que no esté aquí):
+${JSON.stringify(PERFIL)}
+
+VOCABULARIO.MD -- claves de "reqs", escala de pesos y trampas conocidas:
+${VOCABULARIO_MD}
+
+BANDAS.JSON -- para clasificar tipo de empresa y país de contratación (NO calcules tú la cifra final, sólo clasifica; el sistema hace la aritmética):
+${JSON.stringify(BANDAS)}
+
+OFERTA A DAR DE ALTA:
+Empresa: ${o.empresa}
+Puesto: ${o.puesto}
+Ubicación: ${o.ubicacion}
+Modalidad: ${o.modalidad}
+Idioma de la oferta: ${o.idioma === 'en' ? 'inglés' : 'español'}
+Descripción completa, tal cual la pegó él:
+${o.descripcion}
+
+TAREA: devuelve SOLO un JSON válido (sin markdown, sin comentarios, sin texto antes ni después) con
+esta forma exacta:
+{
+ "familia": "genai|ml|cv|ds|mlops|research|backend|general",
+ "titular": "titular corto del CV adaptado a esta oferta; NUNCA 'Senior'/'Sénior'/'Sr.' aunque el puesto lo lleve",
+ "resumen": "2-3 frases, máximo 240 caracteres, en el idioma de la oferta: quién es, el logro que conecta con esta oferta y opcionalmente las tecnologías clave",
+ "skills_extra": "0 a 4 términos que SÍ tiene y la variante de su familia no saca, separados por coma, o cadena vacía",
+ "reqs": [["clave_de_vocabulario", peso_1_a_10, "etiqueta con las palabras del anuncio"], "..."],
+ "surfaced": ["claves de reqs que el resumen/titular sacan a relucir -- SOLO si tiene evidencia > 0 en el PERFIL"],
+ "anios_min": numero_de_anios_que_pide_el_anuncio_o_null,
+ "alerta": "aviso corto si algo merece ojo -- intermediaria sin nombrar cliente, banda de otro país, dato ambiguo -- o cadena vacía",
+ "salario": {"tipo_empresa": "producto_internacional|producto_espana|consultora|gran_empresa_final|centro_tecnologico",
+             "pais_contratacion": "una clave de bandas.json.paises, espana si no se dice otra cosa",
+             "ajustes": ["hasta 2 claves de bandas.json.ajustes que apliquen, o array vacío"]}
+}
+
+Recuerda el candado, igual que en el resto del dashboard: "surfaced" y "skills_extra" JAMÁS pueden
+llevar algo que el PERFIL no demuestra, aunque el anuncio lo pida -- eso es un hueco, no una
+competencia. Devuelve siempre el campo "salario" con tu mejor clasificación, aunque el usuario ya
+vaya a poner la cifra a mano.`;
+}
+
+function nuevoId(empresa, puesto){
+  return 'manual-' + slug((empresa||'')+'-'+(puesto||'')).toLowerCase() + '-' + Date.now().toString(36).slice(-5);
+}
+
+function nuevaHTML(){
+  const hoyIso = new Date().toISOString().slice(0,10);
+  return `<div class="modal" role="dialog" aria-modal="true" aria-label="Añadir oferta a mano"><div class="box">
+    <h2>Añadir oferta a mano</h2>
+    <div class="body">
+      <p class="cfgnota">Pega la descripción tal cual la has leído. Claude saca los requisitos, adapta tu titular y tu resumen a esta oferta y, si no publica salario, lo estima con las mismas tablas que usa la tarea diaria -- con el mismo candado anti-invención de siempre: nunca te atribuye algo que no tienes.</p>
+      <fieldset><legend>La oferta</legend><div class="cgrid">
+        <div class="cf"><label for="n-empresa">Empresa</label><input type="text" id="n-empresa"></div>
+        <div class="cf"><label for="n-puesto">Puesto</label><input type="text" id="n-puesto"></div>
+        <div class="cf full"><label for="n-desc">Descripción del puesto</label>
+          <span class="h">El texto completo del anuncio. Cuanto más completo, mejor sale la adaptación y la puntuación.</span>
+          <textarea id="n-desc" style="min-height:170px"></textarea></div>
+        <div class="cf"><label for="n-ubicacion">Ubicación</label><input type="text" id="n-ubicacion" placeholder="Madrid, España (remoto)…"></div>
+        <div class="cf"><label for="n-url">Enlace al anuncio (opcional)</label><input type="text" id="n-url" placeholder="https://…"></div>
+      </div></fieldset>
+      <fieldset><legend>Dónde y cuándo</legend><div class="cgrid">
+        <div class="cf"><label for="n-modalidad">Modalidad</label>
+          <select id="n-modalidad"><option value="100% remoto">100% remoto</option><option value="Híbrido">Híbrido</option><option value="Presencial">Presencial</option></select></div>
+        <div class="cf"><label class="chk" style="margin-top:22px"><input type="checkbox" id="n-local">Está en Navarra o Gipuzkoa</label></div>
+        <div class="cf"><label for="n-ambito">Ámbito</label>
+          <select id="n-ambito">${AMBITOS_POS.map(a=>`<option>${esc(a)}</option>`).join('')}</select></div>
+        <div class="cf"><label for="n-idioma">Idioma de la oferta</label>
+          <select id="n-idioma"><option value="es">Español</option><option value="en">Inglés</option></select></div>
+        <div class="cf"><label for="n-publicada">Fecha de publicación</label>
+          <input type="date" id="n-publicada" value="${hoyIso}"></div>
+      </div></fieldset>
+      <fieldset><legend>Salario</legend><div class="cgrid">
+        <div class="cf"><label for="n-salmin">Mínimo (€ brutos/año, opcional)</label><input type="number" id="n-salmin" min="0" step="1000"></div>
+        <div class="cf"><label for="n-salmax">Máximo (€ brutos/año, opcional)</label><input type="number" id="n-salmax" min="0" step="1000"></div>
+        <div class="cf full"><span class="h">Déjalo en blanco si el anuncio no publica banda: se estima y queda marcada como «Estimado», igual que el resto del radar.</span></div>
+      </div></fieldset>
+      <fieldset><legend>Estado inicial</legend><div class="cgrid">
+        <div class="cf"><label for="n-estado">Estado</label>
+          <select id="n-estado"><option value="activa">Activa</option><option value="aplicada">Ya aplicada</option><option value="descartada">Descartada</option></select></div>
+        <div class="cf" id="n-fase-wrap" hidden><label for="n-fase">Fase</label>
+          <select id="n-fase">${FASES.map(f=>`<option value="${f}">${esc(FASE_ES[f])}</option>`).join('')}</select></div>
+        <div class="cf full"><label for="n-notas">Notas (opcional)</label><textarea id="n-notas"></textarea></div>
+      </div></fieldset>
+    </div>
+    <div class="foot">
+      <span class="pt" id="nuevamsg" style="margin-right:auto;font-size:12.5px">${esc(nuevaMsg)}</span>
+      <button class="btn" id="nuevacancel">Cancelar</button>
+      <button class="btn primary" id="nuevaguardar">${nuevaGuardando?'Generando…':'Añadir y adaptar CV'}</button>
+    </div>
+  </div></div>`;
+}
+function pintaNueva(){
+  const cont=document.getElementById('nuevamodal');
+  cont.innerHTML = nuevaAbierta ? nuevaHTML() : '';
+  if(!nuevaAbierta) return;
+  document.getElementById('nuevacancel').onclick = cierraNueva;
+  document.getElementById('nuevaguardar').onclick = guardaNueva;
+  document.getElementById('n-estado').onchange = e=>{
+    document.getElementById('n-fase-wrap').hidden = e.target.value!=='aplicada';
+  };
+  cont.querySelector('.modal').onclick = e=>{ if(e.target===cont.querySelector('.modal')) cierraNueva(); };
+}
+function abreNueva(){ nuevaAbierta=true; nuevaMsg=''; pintaNueva(); }
+function cierraNueva(){ if(nuevaGuardando) return; nuevaAbierta=false; pintaNueva(); }
+
+async function guardaNueva(){
+  if(nuevaGuardando) return;
+  const val = id => document.getElementById(id).value.trim();
+  const empresa = val('n-empresa'), puesto = val('n-puesto'), descripcion = val('n-desc');
+  if(!empresa || !puesto || !descripcion){
+    nuevaMsg = 'Empresa, puesto y descripción son obligatorios.'; pintaNueva(); return;
+  }
+  if(!sampleTried){ sampleTried=true; try{ sampleNs = await claude.use('sample'); }catch(e){ sampleNs=null; } }
+  if(!sampleNs){ nuevaMsg='La generación con Claude no está disponible en esta vista.'; pintaNueva(); return; }
+
+  const ubicacion = val('n-ubicacion') || '—';
+  const modalidad = document.getElementById('n-modalidad').value;
+  const local = document.getElementById('n-local').checked;
+  const ambito = document.getElementById('n-ambito').value;
+  const idioma = document.getElementById('n-idioma').value;
+  const url = val('n-url');
+  const publicada = val('n-publicada') || new Date().toISOString().slice(0,10);
+  const salMinUser = numOnull('n-salmin'), salMaxUser = numOnull('n-salmax');
+  const estadoIni = document.getElementById('n-estado').value;
+  const fase = document.getElementById('n-fase').value;
+  const notas = val('n-notas');
+
+  nuevaGuardando=true;
+  nuevaMsg='Leyendo la descripción, adaptando el CV y calculando el encaje…'; pintaNueva();
+
+  let extra;
+  try{
+    const res = await sampleNs(promptExtraccion({empresa,puesto,ubicacion,modalidad,idioma,descripcion}),
+                                {modelTier:'default', cache:false});
+    extra = parseaJSON(res.text||'');
+  }catch(e){
+    nuevaGuardando=false;
+    const c=e&&e.code;
+    nuevaMsg = c==='not_granted' ? 'No has dado permiso para generar con Claude.'
+             : c==='rate_limited' ? 'Demasiadas peticiones seguidas; espera un momento.'
+             : 'No se ha podido analizar la oferta; inténtalo de nuevo.';
+    pintaNueva(); return;
+  }
+  if(!extra){
+    nuevaGuardando=false;
+    nuevaMsg='Claude no ha devuelto una respuesta que se pueda leer; inténtalo de nuevo.';
+    pintaNueva(); return;
+  }
+
+  const familia = FAMILIA_ES[extra.familia] ? extra.familia : 'general';
+  const titular = limpiaTitular(String(extra.titular||puesto).slice(0,120)) || puesto;
+  const resumen = String(extra.resumen||'').slice(0,320);
+  const skillsExtra = filtraSkillsExtra(extra.skills_extra);
+  const reqsBrutos = Array.isArray(extra.reqs) ? extra.reqs
+    .filter(x=>Array.isArray(x) && x.length>=3 && x[0] && x[2])
+    .map(x=>[String(x[0]), Math.max(1,Math.min(10,Number(x[1])||5)), String(x[2]).slice(0,140)])
+    : [];
+  const reqs = reqsBrutos.length ? reqsBrutos : [['general', 5, puesto]];
+  const surfacedArr = (Array.isArray(extra.surfaced)?extra.surfaced:[])
+    .filter(k=>(EVIDENCIA[k]||0) > 0);
+  const aniosMin = Number.isFinite(extra.anios_min) ? extra.anios_min : null;
+  const alerta = String(extra.alerta||'').slice(0,240);
+
+  let salMin, salMax, salOrigen, salBase;
+  if(salMinUser!=null && salMaxUser!=null){
+    salMin=Math.min(salMinUser,salMaxUser); salMax=Math.max(salMinUser,salMaxUser); salOrigen='publicado';
+    salBase = 'Salario indicado a mano por Íñigo al añadir la oferta.';
+  } else {
+    const s = extra.salario || {};
+    const est = estimaSalario(familia, s.tipo_empresa, s.pais_contratacion, s.ajustes);
+    salMin=est.salMin; salMax=est.salMax; salOrigen='estimado'; salBase=est.salBase;
+  }
+  const salMedio = Math.round((salMin+salMax)/2);
+
+  const punt = puntuarOferta(reqs, surfacedArr);
+  const delta = Math.round((punt.scoreAdap-punt.scoreOrig)*10)/10;
+  const mejora = punt.scoreOrig ? Math.round(1000*(punt.scoreAdap-punt.scoreOrig)/punt.scoreOrig)/10 : 0;
+  const prioridad = Math.round(punt.scoreAdap*pesoFamilia(familia)*10)/10;
+  const fc = calculaFoco(puesto, publicada, salOrigen, prioridad);
+  const brecha = brechaAprendizaje(reqs);
+
+  const id = nuevoId(empresa, puesto);
+  const row = {
+    id, empresa, puesto, ubicacion, modalidad, publicada, idioma, fuente:'Manual',
+    salMin, salMax, salMedio, salOrigen, salBase,
+    url: url || '',
+    scoreOrig: punt.scoreOrig, scoreAdap: punt.scoreAdap, delta, mejora,
+    fuertes: punt.fuertes, huecos: punt.huecos, alerta,
+    titular, resumen, familia, skillsExtra,
+    reqs: reqs.slice().sort((a,b)=>b[1]-a[1]).slice(0,12).map(r=>`${r[2]} (peso ${r[1]})`),
+    zona: local ? 'local' : 'remoto',
+    ambito, prioridad, brecha,
+    foco: fc.foco, dias: fc.dias, motivoFoco: fc.motivoFoco, aniosMin,
+  };
+
+  DATA.push(row); MANUAL[id]=row; openId=id; vista='activa';
+  nuevaGuardando=false; nuevaAbierta=false;
+  pintaNueva(); render();
+  const tr=document.querySelector(`tr.r[data-id="${id}"]`);
+  if(tr) tr.scrollIntoView({block:'center'});
+  toast('Oferta añadida y CV adaptado.');
+
+  if(estadoIni!=='activa' || notas){
+    const patch = {estado: estadoIni};
+    if(estadoIni==='aplicada'){ patch.fase=fase; patch.fechaAplicacion=hoy(); }
+    if(notas) patch.notas=notas;
+    guardar(id, patch);
+  }
+  if(db){
+    try{
+      await db.doc('manual/'+id).set(row);
+      await db.doc('ofertas/'+id).set({
+        id, empresa, puesto, ubicacion, modalidad, publicada, idioma, fuente:'Manual',
+        sal_min: salMin, sal_max: salMax, sal_origen: salOrigen, sal_base: salBase,
+        url_apply: url || '', ambito, anios_min: aniosMin,
+        reqs, surfaced: surfacedArr,
+      });
+      await db.doc('tailor/'+id).set({ familia, titular, resumen, skills_extra: skillsExtra });
+    }catch(e){
+      toast('Guardada en esta vista, pero no se ha podido escribir en la base de datos compartida.');
+    }
+  } else {
+    toast('Guardada sólo en este navegador: no hay almacenamiento compartido.');
+  }
+}
+
 function novPill(id){
   const c = corr(id);
   if(!c) return '<span class="pt">—</span>';
@@ -862,7 +1287,7 @@ function detailHTML(r){
         </div>
         ${novDetalle(r)}
         <div class="actions">
-          <a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Aplicar en ${esc(r.fuente)} →</a>
+          ${r.url?`<a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Aplicar en ${esc(r.fuente)} →</a>`:''}
           <button class="btn" data-cv="${r.id}">Generar CV adaptado (PDF)</button>
         </div>
         <p class="hint">El CV se arma en el momento con el titular, el resumen y el orden de logros calculados para esta oferta, en su idioma y en una sola página.</p>
@@ -1930,7 +2355,7 @@ function tablaExperiencia(){
         <td class="pt">${esc(FAMILIA_ES[r.familia]||r.familia)}</td>
         <td class="num">${eur(r.salMedio)}</td>
         <td style="white-space:nowrap"><button class="rebtn" data-ficha="${r.id}">Ficha</button>
-            <a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener" style="padding:4px 9px;font-size:12px">Ver</a></td>
+            ${r.url?`<a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener" style="padding:4px 9px;font-size:12px">Ver</a>`:''}</td>
       </tr>`).join('')}</tbody>
     </table>`;
 }
@@ -2137,7 +2562,7 @@ function tarjetaHoy(r){
     </div>
     <p class="por">${hueco ? 'Hueco principal: <b>'+esc(hueco)+'</b>.' : 'Cubres todos los requisitos que pide.'}${r.motivoFoco ? ' '+esc(r.motivoFoco.charAt(0).toUpperCase()+r.motivoFoco.slice(1))+'.' : ''}</p>
     <div class="acc">
-      <a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Abrir oferta</a>
+      ${r.url?`<a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Abrir oferta</a>`:''}
       <button class="btn" data-cv="${r.id}">CV</button>
       <button class="btn" data-ficha="${r.id}">Ficha</button>
       <button class="btn" data-apply="${r.id}">Aplicada</button>
@@ -2243,7 +2668,8 @@ fs.oninput=()=>{fsv.textContent=eur(+fs.value);render()};
 const fc=document.getElementById('fsc'), fcv=document.getElementById('fscv');
 fc.oninput=()=>{fcv.textContent=fc.value+' %';render()};
 document.getElementById('cfgbtn').onclick=abreCfg;
-document.addEventListener('keydown', e=>{ if(e.key==='Escape' && cfgAbierta) cierraCfg(); });
+document.getElementById('nuevabtn').onclick=abreNueva;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && cfgAbierta) cierraCfg(); if(e.key==='Escape' && nuevaAbierta) cierraNueva(); });
 document.getElementById('reset').onclick=()=>{
   document.getElementById('q').value=''; document.getElementById('fmod').value='';
   document.getElementById('flang').value=''; document.getElementById('famb').value=''; document.getElementById('ffam').value=''; document.getElementById('ffue').value=''; fs.value=35000; fsv.textContent=eur(35000);
@@ -2274,6 +2700,19 @@ out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL).replace("__CV
           .replace("__LINT__", LINT_JS)
           .replace("__EVIDENCIA__", json.dumps(_PERFIL_DOC.get("evidencia_orig") or {},
                                                ensure_ascii=False, separators=(',', ':')))
+          .replace("__TECHO__", json.dumps(_PERFIL_DOC.get("techo") or {},
+                                           ensure_ascii=False, separators=(',', ':')))
+          .replace("__PESO_FAMILIA__", json.dumps(PESO_FAMILIA, ensure_ascii=False, separators=(',', ':')))
+          .replace("__PESO_FAMILIA_DEFECTO__", json.dumps(PESO_FAMILIA_DEFECTO))
+          .replace("__DIFICULTAD__", json.dumps({k: list(v) for k, v in DIFICULTAD.items()},
+                                                ensure_ascii=False, separators=(',', ':')))
+          .replace("__DIFICULTAD_DEFECTO__", json.dumps(list(DIFICULTAD_DEFECTO), ensure_ascii=False))
+          .replace("__SENIOR_RE_FOCO__", json.dumps(_SENIOR_RE_FOCO.pattern, ensure_ascii=False))
+          .replace("__FRESCURA__", json.dumps(FRESCURA, ensure_ascii=False))
+          .replace("__PENALIZACION_SENIOR__", json.dumps(PENALIZACION_SENIOR))
+          .replace("__BONUS_SALARIO_PUBLICADO__", json.dumps(BONUS_SALARIO_PUBLICADO))
+          .replace("__VOCABULARIO_MD__", json.dumps(VOCABULARIO_MD, ensure_ascii=False))
+          .replace("__BANDAS__", BANDAS)
           .replace("__CONTACTO__", CONTACTO_JS).replace("__NOMBRE__", CONTACTO["nombre_es"])
           .replace("__N__", str(len(rows))).replace("__FECHA__", FECHA))
 open('out/dashboard.html','w').write(out)

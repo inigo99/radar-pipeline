@@ -17,7 +17,7 @@
  * — li.terminos() cae entonces a calcularlo sobre `_tn` como hacía antes. */
 (function (R) {
   const li = R.li = {};
-  li.version = 'linkedin-2026-09-16';
+  li.version = 'linkedin-2026-09-16b';
   li.jobs = {};        // id -> ficha del listado
   li.det = [];         // fichas con descripción ya procesada
   li.cola = [];        // pendientes de detallar
@@ -110,6 +110,48 @@
     return hits;
   };
 
+  /* Etiqueta de modalidad de LinkedIn (Remoto/Híbrido/Presencial), como
+   * desempate SÓLO para lo que la descripción deja en `remoto_sin_confirmar`
+   * (16-sep-2026). No sustituye la lectura de la descripción para todo lo
+   * demás -- salario, años, reqs siguen saliendo de la ficha ligera de
+   * siempre -- por dos motivos comprobados a mano ese día:
+   *
+   *   1. La etiqueta sólo vive en la página completa de la oferta
+   *      (`/jobs/view/<id>`, con sesión iniciada), no en la ficha ligera de
+   *      `jobs-guest/.../jobPosting/<id>` que usa `detallar()`: se comprobó
+   *      con el mismo `fetch` que usa el código y no aparece ni una vez.
+   *      Pedirla para cada oferta encarecería x25 el HTML por ficha (~900 KB
+   *      frente a ~36 KB), y necesita sesión -- cosa que hoy el pipeline
+   *      tolera no tener. Por eso se pide sólo para las pocas ambiguas al día,
+   *      no para todas.
+   *   2. Esa misma página completa NO trae la descripción de forma fiable
+   *      (se carga aparte, perezosa): no sirve para fusionar en una sola
+   *      petición lo que hoy hacen dos.
+   *
+   * La insignia va sola dentro de una etiqueta, sin más texto
+   * (`<span ...>Híbrido</span>`), así que `RE_ETIQUETA` exige que sea todo
+   * el contenido del tag: evita que "remote"/"híbrido" sueltos en cualquier
+   * otro sitio de la página cuenten. Se lee de los primeros 60.000
+   * caracteres, la zona de la cabecera (antes de "empleos similares" y
+   * demás módulos, que sí repiten la palabra para OTRAS ofertas). Si el
+   * fetch falla, no hay sesión, o no aparece nada reconocible, se deja tal
+   * cual estaba (`remoto_sin_confirmar`, que ya entra con alerta para que
+   * lo mire él). */
+  const RE_ETIQUETA = />\s*(Remoto|H[ií]brido|Presencial|Remote|Hybrid|On-?site)\s*</;
+  const MAPA_ETIQUETA = { remoto: 'remoto', remote: 'remoto',
+    hibrido: 'hibrido', hybrid: 'hibrido',
+    presencial: 'presencial', 'on-site': 'presencial', onsite: 'presencial' };
+
+  li.etiquetaModalidad = async (id) => {
+    try {
+      const r = await fetch('https://www.linkedin.com/jobs/view/' + id, { credentials: 'include' });
+      if (!r.ok) return null;               // sin sesión, bloqueada, etc. -- no insistir
+      const cabecera = (await r.text()).slice(0, 60000);
+      const m = cabecera.match(RE_ETIQUETA);
+      return m ? (MAPA_ETIQUETA[R.norm(m[1])] || null) : null;
+    } catch (e) { return null; }
+  };
+
   /* Descarga la descripción y saca sólo los campos que importan: modalidad,
    * ámbito, salario, años y —si vocabulario.js está cargado— los términos
    * del vocabulario, todo de la misma lectura. Nunca get_page_text ni
@@ -122,8 +164,16 @@
       const txt = R.texto(await r.text());
       const tn = R.norm(txt);
       const etiquetaRemoto = /^R/.test(j.q || '');
+      const modalidad = R.modalidad(tn, R.norm(j.ubicacion), etiquetaRemoto);
+      if (modalidad.tipo === 'remoto_sin_confirmar') {
+        const et = await li.etiquetaModalidad(j.id);
+        if (et) {
+          modalidad.frases = [`etiqueta de LinkedIn: ${et}`, ...modalidad.frases];
+          modalidad.tipo = et;
+        }
+      }
       Object.assign(j, {
-        modalidad: R.modalidad(tn, R.norm(j.ubicacion), etiquetaRemoto),
+        modalidad,
         ambito: R.ambito(tn),
         salario: R.salario(txt),
         anios: R.anios(tn),

@@ -14,7 +14,7 @@
  */
 window.__radar = window.__radar || {};
 (function (R) {
-  R.version = 'common-2026-09-16';
+  R.version = 'common-2026-09-16b';
 
   R.sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -42,8 +42,8 @@ window.__radar = window.__radar || {};
    * inglés es «This is a remote position». No quitar los \b...\b sueltos.
    */
   R.RE_REMOTO = /(100\s*%?\s*remot|fully remote|full[- ]remote|remote[- ]first|totalmente remot|completamente remot|en remoto|teletrabajo|trabajo remot|remote work|work from home|work remotely|\bremote\b|\bremoto\b|\bremota\b)/;
-  R.RE_HIBRIDO = /(hibrid|hybrid|\d\s*d[ií]as? (en|de) (oficina|casa)|days (in|at) the office)/;
-  R.RE_PRESENCIAL = /(presencial|on-?site|onsite|en la oficina|nuestras oficinas|not remote|no remote)/;
+  R.RE_HIBRIDO = /(hibrid|hybrid|\d\s*d[ií]as? (en|de|a la) (oficina|casa|semana)|days? (in|at|per week in) (the )?office|office[^.]{0,40}\d+\s*days?\s*(a|per)\s*week|\d+\s*days?\s*(a|per)\s*week[^.]{0,40}office|d[ií]as? (de )?presencialidad|modelo h[ií]brido|parcialmente remot|remoto parcial|combinaci[oó]n de (teletrabajo|remoto)|flexib\w* .{0,25}remot|some days? (a week )?(in|at) (the )?office|office[- ]based .{0,25}(flexib|remot))/;
+  R.RE_PRESENCIAL = /(presencial|on-?site|onsite|in-?person|en la oficina|nuestras? oficinas?|not remote|no remote|not a remote|no es (un puesto )?remoto|no (se admite|se permite|admite|permite) (el )?teletrabajo|sin (opcion|opción) de teletrabajo|acudir a (la )?oficina|asistencia (a|diaria) (la )?oficina|desde (la|nuestra) oficina|from (our|the) office|based in (our|the) office|office[- ]based role\b)/;
   R.RE_LOCAL = /(navarr|pamplona|iruña|gipuzkoa|guipuzcoa|san sebasti|donostia|irun|tudela|mutilva|noain|estella|zarautz|tolosa)/;
 
   /* Devuelve hasta `max` frases con contexto donde el texto habla de modalidad.
@@ -56,20 +56,38 @@ window.__radar = window.__radar || {};
     return out;
   };
 
-  /* Clasifica la modalidad a partir de las frases y de la etiqueta del portal.
-   * `etiquetaRemoto` es lo que dice el listado, que miente a menudo.
+  /* Clasifica la modalidad a partir de la descripción entera y de la etiqueta
+   * del portal. `etiquetaRemoto` es lo que dice el listado, que miente a menudo.
    *
    * Devuelve: remoto | hibrido | presencial | local | remoto_sin_confirmar | desconocida
    *
    * `remoto_sin_confirmar` es el caso importante: el portal la marca remota y
    * la descripción no dice nada que lo contradiga. Antes se descartaban en
-   * silencio; ahora entran con alerta para que él lo pregunte. */
+   * silencio; ahora entran con alerta para que él lo pregunte.
+   *
+   * OJO (16-sep-2026): esto clasificaba sólo con las 3 primeras frases que
+   * `frasesModalidad` encontraba, en orden de aparición y mezclando los tres
+   * tipos. Una descripción que menciona «remote» tres veces en la cabecera
+   * (cultura, beneficios, «remote-friendly team») y sólo dice «2 days a week
+   * in the office» más abajo agotaba las 3 frases antes de llegar ahí, y la
+   * oferta salía como `remoto` sin que nada la contradijera — cuando sí había
+   * contradicción, sólo que más tarde en el texto. Por eso `hib`/`pre` se
+   * comprueban ahora sobre el texto completo; `frasesModalidad` se sigue
+   * usando sólo para guardar contexto legible en `frases`, no para decidir. */
+  R.RE_NO_REMOTO = /(not remote|no remote|not a remote|no es (un puesto )?remoto|no (se admite|se permite|admite|permite) (el )?teletrabajo|sin (opcion|opción) de teletrabajo)/;
+
   R.modalidad = (textoNorm, ubicacionNorm, etiquetaRemoto) => {
-    const frases = R.frasesModalidad(textoNorm, 3);
-    const enFrases = re => frases.some(f => re.test(f));
-    const rem = enFrases(R.RE_REMOTO), hib = enFrases(R.RE_HIBRIDO), pre = enFrases(R.RE_PRESENCIAL);
+    const frases = R.frasesModalidad(textoNorm, 4);
+    const rem = R.RE_REMOTO.test(textoNorm),
+          hib = R.RE_HIBRIDO.test(textoNorm),
+          pre = R.RE_PRESENCIAL.test(textoNorm),
+          negacion = R.RE_NO_REMOTO.test(textoNorm);
     let tipo;
-    if (rem && !hib && !pre) tipo = 'remoto';
+    // Una negación explícita («no se admite teletrabajo») manda aunque la
+    // palabra «remoto»/«teletrabajo» también aparezca en esa misma frase
+    // (es lo normal: la negación va pegada a la palabra que niega).
+    if (negacion && !hib) tipo = 'presencial';
+    else if (rem && !hib && !pre) tipo = 'remoto';
     else if (rem && (hib || pre)) tipo = 'hibrido';       // «remoto» como ventaja suelta, no como modalidad
     else if (hib) tipo = 'hibrido';
     else if (pre) tipo = 'presencial';

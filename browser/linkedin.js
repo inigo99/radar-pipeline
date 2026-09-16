@@ -5,7 +5,9 @@
  *   await __radar.li.buscar(TITULOS, {location:'Navarre, Spain'})
  *   __radar.li.filtrar(IDS_CONOCIDOS, '2026-09-08')      // por título y fecha
  *   await __radar.li.detallar(20)                        // en tandas
- *   __radar.li.clasificar(); __radar.saca(6)             // sólo lo que sobrevive
+ *   __radar.li.clasificar(CFG); __radar.saca(6)          // sólo lo que sobrevive
+ *   // CFG es config/filtros; sin argumento se comporta como el valor por
+ *   // defecto del dashboard (sólo remoto) -- ver R.modalidadesAceptadas().
  *
  * Carga también vocabulario.js ANTES de detallar(): desde el 16-sep-2026
  * detallar() saca los términos del vocabulario en la misma pasada que la
@@ -134,15 +136,18 @@
     return 'detalladas=' + li.det.length + ' pendientes=' + li.cola.length;
   };
 
-  /* Reparte en las tres cestas y deja las buenas en la cola de salida. */
-  li.clasificar = (areasLocales) => {
+  /* Reparte en las tres cestas y deja las buenas en la cola de salida.
+   * `cfg` es `config/filtros` (o el subconjunto con `buscar_remoto` /
+   * `buscar_hibrido` / `buscar_presencial`); ver R.modalidadesAceptadas(). */
+  li.clasificar = (cfg) => {
+    const aceptadas = R.modalidadesAceptadas(cfg);
     const dentro = [], fuera = [], revisar = [];
     for (const j of li.det) {
       if (j.cerrada) { fuera.push(j); continue; }
       const t = j.modalidad.tipo;
-      if (t === 'remoto' || t === 'local') dentro.push(j);
-      else if (t === 'remoto_sin_confirmar') revisar.push(j);
-      else fuera.push(j);
+      if (!aceptadas.has(t)) { fuera.push(j); continue; }
+      if (t === 'remoto_sin_confirmar') revisar.push(j);
+      else dentro.push(j);
     }
     const fila = j => [j.id, j.empresa, j.titulo, j.ubicacion, j.fecha,
                        j.modalidad.tipo, j.salario || '-', j.anios || '-',

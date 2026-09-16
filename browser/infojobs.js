@@ -125,11 +125,15 @@
     return 'detalladas=' + ij.det.length + ' pendientes=' + ij.cola.length;
   };
 
-  ij.clasificar = () => {
+  /* `cfg` es config/filtros (o el subconjunto con buscar_remoto/hibrido/
+   * presencial); sin argumento se comporta como el valor por defecto del
+   * dashboard (sólo remoto) -- ver R.modalidadesAceptadas() en common.js. */
+  ij.clasificar = (cfg) => {
+    const aceptadas = R.modalidadesAceptadas(cfg);
     const fila = o => [ij.idPara(o), o.empresa, o.titulo, o.ciudad,
                        o.modalidad.tipo, o.publicado, o.salario || '-', o.anios || '-',
                        (o.modalidad.frases[0] || '').slice(0, 80)].join('|');
-    const dentro = ij.det.filter(o => ['remoto', 'local', 'remoto_sin_confirmar'].includes(o.modalidad.tipo));
+    const dentro = ij.det.filter(o => aceptadas.has(o.modalidad.tipo));
     R.cola = dentro.map(fila);
     return { dentro: dentro.length, fuera: ij.det.length - dentro.length };
   };

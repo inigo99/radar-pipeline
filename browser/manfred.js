@@ -1,8 +1,8 @@
 /* Extractor de Manfred. Requiere common.js y una pestaña en getmanfred.com
  * (CORS). Añadido el 16-sep-2026, cuando Manfred pasó de ser un subagente sin
  * navegador -y por tanto sin cobertura real- a tener su propio script: hay
- * que hacerlo en el hilo principal, igual que LinkedIn/InfoJobs/JSearch,
- * porque el navegador es una sola instancia.
+ * que hacerlo en el hilo principal, igual que LinkedIn e InfoJobs, porque el
+ * navegador es una sola instancia.
  *
  * A diferencia de LinkedIn e InfoJobs, aquí NO hace falta parsear HTML ni
  * adivinar modalidad por regex: el listado es una API JSON con salario,
@@ -13,9 +13,12 @@
  *
  * Flujo típico de una ejecución:
  *   await __radar.mf.buscar()
- *   __radar.mf.filtrar(IDS_CONOCIDOS, '2026-09-11T09:15:00Z')
+ *   __radar.mf.filtrar(IDS_CONOCIDOS, '2026-09-11T09:15:00Z', CFG)
  *   await __radar.mf.detallar(10)
  *   __radar.saca(6)
+ *   // CFG es config/filtros; sin argumento se comporta como el valor por
+ *   // defecto del dashboard (sólo remoto) -- ver R.modalidadesAceptadas()
+ *   // en common.js.
  *
  * OJO con la fecha: Manfred sólo da `updatedAt` (última actualización), no
  * fecha de publicación. Para una oferta nunca vista antes es lo mismo, pero
@@ -83,20 +86,29 @@
 
   mf.RE_LOCAL_MF = R.RE_LOCAL;   // alias, por claridad en clasificarModalidad
 
-  /* La modalidad no hace falta adivinarla por regex: remotePercentage ya lo
-   * dice. 100 = remoto; si no, se cuenta como local sólo cuando alguna
-   * ubicación cae en Navarra/Gipuzkoa; cualquier otro caso (híbrido o
-   * presencial fuera de esas provincias) se descarta aquí, como con las
-   * demás fuentes. */
+  /* La modalidad no hace falta adivinarla por regex: `remotePercentage` ya lo
+   * dice, y con más grano que LinkedIn/InfoJobs (que sólo tienen la frase
+   * suelta del anuncio): 100 = remoto, 0 = presencial, lo de en medio =
+   * híbrido. Desde el 16-sep-2026 se distingue híbrido de presencial en vez
+   * de meter todo lo que no es remoto/local en un «fuera» sin más detalle,
+   * para que `buscar_hibrido`/`buscar_presencial` (ver R.modalidadesAceptadas
+   * en common.js) también valgan para Manfred. La zona local (Navarra/
+   * Gipuzkoa) sigue mandando por encima de todo, salvo si ya es 100 % remoto. */
   mf._modalidad = o => {
     const ciudades = (o.locations || []).map(l => R.norm(l.city || l.town || '')).join(' ');
-    if (Number(o.remotePercentage) >= 100) return 'remoto';
-    if (R.RE_LOCAL.test(ciudades)) return 'local';
-    return 'fuera';
+    const pct = Number(o.remotePercentage);
+    let tipo;
+    if (pct >= 100) tipo = 'remoto';
+    else if (pct > 0) tipo = 'hibrido';
+    else tipo = 'presencial';
+    if (R.RE_LOCAL.test(ciudades) && tipo !== 'remoto') tipo = 'local';
+    return tipo;
   };
 
-  /* Criba por título, por fecha (updatedAt) y contra lo ya conocido. */
-  mf.filtrar = (idsConocidos, desde) => {
+  /* Criba por título, por fecha (updatedAt), por modalidad aceptada (`cfg`,
+   * ver R.modalidadesAceptadas) y contra lo ya conocido. */
+  mf.filtrar = (idsConocidos, desde, cfg) => {
+    const aceptadas = R.modalidadesAceptadas(cfg);
     const conocidos = new Set((idsConocidos || []).map(String));
     mf.cola = Object.values(mf.ofertas).filter(o => {
       const id = 'mf-' + o.slug;
@@ -104,7 +116,7 @@
       if (desde && o.updatedAt && o.updatedAt < desde) return false;
       if (!R.tituloVale(o.position)) return false;
       const tipo = mf._modalidad(o);
-      if (tipo !== 'remoto' && tipo !== 'local') return false;
+      if (!aceptadas.has(tipo)) return false;
       o._tipo = tipo;
       return true;
     });

@@ -158,6 +158,38 @@ quedársela: la oferta entra marcada como `remoto_sin_confirmar`, con una alerta
 para preguntarlo en el primer contacto. Un descarte silencioso no se puede
 auditar; una alerta, sí.
 
+## Qué modalidades se buscan: `buscar_remoto`/`buscar_hibrido`/`buscar_presencial`
+
+Hasta el 16-sep-2026 esto era un único interruptor (`solo_remoto`) que, en la
+práctica, no hacía nada: `li.clasificar()`, `ij.clasificar()` y `mf.filtrar()`
+tenían el remoto/local/`remoto_sin_confirmar` **fijo en el código**, así que
+poner `solo_remoto` a `false` en el dashboard no cambiaba nada — híbrido y
+presencial (fuera de las zonas locales) nunca llegaban a `candidatas`, los
+descartara quien los descartara.
+
+Ahora hay tres campos independientes en `config/filtros` —
+`buscar_remoto`, `buscar_hibrido`, `buscar_presencial` — y los tres extractores
+reciben la configuración en vez de tenerla escrita a fuego:
+
+    li.clasificar(CFG)
+    ij.clasificar(CFG)
+    mf.filtrar(idsConocidos, desde, CFG)
+
+`R.modalidadesAceptadas(cfg)` (en `common.js`) es la única fuente de verdad
+sobre qué `modalidad.tipo` pasa el filtro. `local` (las zonas de
+`areas_locales`, Navarra/Gipuzkoa por defecto) entra **siempre**, gane o
+pierda cualquiera de los otros tres campos: es una excepción por zona, no una
+modalidad más. Sin argumento (o con los tres campos a `undefined`), la
+función se comporta como el valor por defecto del dashboard — sólo remoto —
+para que un extractor viejo o un olvido no abra la puerta de golpe.
+
+**Manfred distingue híbrido de presencial mejor que LinkedIn o InfoJobs**,
+porque no depende de una frase suelta en la descripción: `remotePercentage`
+ya lo dice con un número (100 = remoto, 0 = presencial, lo de en medio =
+híbrido). Antes de este cambio, todo lo que no fuera 100 % remoto o local
+caía en un «fuera» sin más detalle, así que `buscar_hibrido`/
+`buscar_presencial` no tenían ningún efecto sobre Manfred aunque se activaran.
+
 ## La pestaña «Filtradas»
 
 Las ofertas que caen por publicar un salario por debajo del mínimo ya no
@@ -181,13 +213,11 @@ candidatas de cualquier fuente, entre el paso 4 y `dedupe.py`:
     python pipeline/filtrar.py candidatas.json data/ok.json --filtros filtros.json
 
 Sólo esas cuatro — **modalidad y `ambitos` siguen sin tocarse aquí, a
-propósito**. La modalidad ya viene restringida a
-remoto/local/remoto_sin_confirmar desde `li.clasificar()`/`ij.clasificar()`/
-`mf.filtrar()`, así que filtrarla otra vez en Python sería casi siempre
-redundante y, en el único caso en que no lo sería (cambiar `areas_locales` en
-el dashboard a una zona que `R.RE_LOCAL` no reconoce todavía), no habría nada
-que rescatar: la oferta nunca sale del navegador. Y `ambitos` necesita saber
-si la frase que encuentra `R.ambito()` es una restricción o una apertura —
+propósito, pero por motivos distintos**. La modalidad ya se decide en el
+navegador con la configuración de verdad (`buscar_remoto`/`buscar_hibrido`/
+`buscar_presencial`, ver más arriba): filtrarla otra vez en Python sería
+repetir un trabajo ya hecho, no tapar un hueco. Y `ambitos` necesita saber si
+la frase que encuentra `R.ambito()` es una restricción o una apertura —
 gramaticalmente son iguales, así que decidirlo a ciegas es inventarse un
 criterio y arriesgarse a tirar una oferta buena, justo lo que avisa
 `pipeline/vocabulario.md`. Eso sigue necesitando que alguien lea la frase.

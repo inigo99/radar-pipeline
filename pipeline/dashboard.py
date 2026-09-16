@@ -502,7 +502,8 @@ const CFG_DEF={
            "Data Scientist","Data Engineer","Full Stack Developer","Backend Developer",
            "Software Engineer","Python Developer","MLOps Engineer","Forward Deployed Engineer"],
   keywords:[], excluir_keywords:[], excluir_empresas:["Hired","Hire Feed"],
-  solo_remoto:true, areas_locales:["Navarra","Gipuzkoa"],
+  buscar_remoto:true, buscar_hibrido:false, buscar_presencial:false,
+  areas_locales:["Navarra","Gipuzkoa"],
   ambitos:["España","Internacional","Navarra / Gipuzkoa"],
   salario_min:45000, exigir_salario_publicado:false,
   anios_perfil:null, margen_anios:MARGEN_DEF,
@@ -683,8 +684,15 @@ function cfgHTML(){
       </div></fieldset>
 
       <fieldset><legend>Dónde</legend><div class="cgrid">
-        <div class="cf full"><label class="chk"><input type="checkbox" id="c-rem" ${c.solo_remoto?'checked':''}>Sólo 100 % remoto, salvo en las zonas de abajo</label></div>
-        <div class="cf"><label for="c-loc">Zonas donde aceptas presencial o híbrido</label>
+        <div class="cf full"><label>Modalidades que buscas</label>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+            <label class="chk"><input type="checkbox" id="c-rem" ${c.buscar_remoto?'checked':''}>Remoto</label>
+            <label class="chk"><input type="checkbox" id="c-hib" ${c.buscar_hibrido?'checked':''}>Híbrido</label>
+            <label class="chk"><input type="checkbox" id="c-pre" ${c.buscar_presencial?'checked':''}>Presencial</label>
+          </div>
+          <span class="h">Apaga híbrido y presencial para buscar sólo en remoto. Las zonas de abajo se
+            aceptan en cualquier modalidad, aunque las de aquí arriba estén apagadas.</span></div>
+        <div class="cf"><label for="c-loc">Zonas donde aceptas cualquier modalidad</label>
           <span class="h">Una por línea.</span>
           <textarea id="c-loc">${esc(lineas(c.areas_locales))}</textarea></div>
         <div class="cf"><label>Ámbitos que cuentan</label>
@@ -739,7 +747,9 @@ async function guardaCfg(){
     keywords: aLista(document.getElementById('c-kw').value),
     excluir_keywords: aLista(document.getElementById('c-xkw').value),
     excluir_empresas: aLista(document.getElementById('c-xemp').value),
-    solo_remoto: document.getElementById('c-rem').checked,
+    buscar_remoto: document.getElementById('c-rem').checked,
+    buscar_hibrido: document.getElementById('c-hib').checked,
+    buscar_presencial: document.getElementById('c-pre').checked,
     areas_locales: aLista(document.getElementById('c-loc').value),
     ambitos: leeMarcados('ambitos'),
     salario_min: numOnull('c-sal'),
@@ -752,6 +762,9 @@ async function guardaCfg(){
   };
   if(!nuevo.titulos.length){ document.getElementById('cfgmsg').textContent='Deja al menos un puesto objetivo.'; return; }
   if(!nuevo.fuentes.length){ document.getElementById('cfgmsg').textContent='Deja al menos una fuente activa.'; return; }
+  if(!nuevo.buscar_remoto && !nuevo.buscar_hibrido && !nuevo.buscar_presencial && !(nuevo.areas_locales||[]).length){
+    document.getElementById('cfgmsg').textContent='Marca al menos una modalidad, o deja alguna zona local.'; return;
+  }
   CFG = Object.assign({},CFG_DEF,nuevo);
   cfgGuardando=true; pintaCfg();
   if(!db){ cfgGuardando=false; cierraCfg(); toast('Guardado sólo en este navegador: no hay almacenamiento compartido'); return; }

@@ -14,7 +14,7 @@
  */
 window.__radar = window.__radar || {};
 (function (R) {
-  R.version = 'common-2026-09-09';
+  R.version = 'common-2026-09-16';
 
   R.sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -77,6 +77,23 @@ window.__radar = window.__radar || {};
     else tipo = 'desconocida';
     if (R.RE_LOCAL.test(ubicacionNorm || '') && tipo !== 'remoto') tipo = 'local';
     return { tipo, frases };
+  };
+
+  /* Qué tipos de `modalidad.tipo` dejan pasar la criba, según la configuración
+   * del dashboard (`buscar_remoto`/`buscar_hibrido`/`buscar_presencial` de
+   * `config/filtros`). `local` entra siempre, pase lo que pase: es una
+   * excepción por zona (Navarra/Gipuzkoa hoy), no una modalidad más -- por
+   * eso `R.modalidad()` ya la resuelve antes de que esto se aplique.
+   * `remoto_sin_confirmar` cuelga de `buscar_remoto`, porque es remoto hasta
+   * que se demuestre lo contrario. Sin `cfg` (o con los campos a `undefined`),
+   * se comporta como el valor por defecto del dashboard: sólo remoto. */
+  R.modalidadesAceptadas = (cfg) => {
+    cfg = cfg || {};
+    const s = new Set(['local']);
+    if (cfg.buscar_remoto !== false) { s.add('remoto'); s.add('remoto_sin_confirmar'); }
+    if (cfg.buscar_hibrido) s.add('hibrido');
+    if (cfg.buscar_presencial) s.add('presencial');
+    return s;
   };
 
   /* ---- Ámbito ----------------------------------------------------------

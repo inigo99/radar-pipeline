@@ -312,6 +312,11 @@ td{padding:11px 10px;vertical-align:top}
 .btn.danger:hover{background:var(--crit-bg);border-color:var(--crit);color:var(--crit)}
 .btn.danger.confirmar{background:var(--crit);border-color:var(--crit);color:#fff}
 .btn.danger.confirmar:hover{filter:brightness(1.08);color:#fff}
+.selbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--surface);
+  border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.selbar.confirmar{border-color:var(--crit);background:var(--crit-bg)}
+th.selcol,td.selcol{width:1%;padding-right:2px;padding-left:14px}
+td.selcol input,th.selcol input{accent-color:var(--accent)}
 .btn:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 .tabs{display:flex;gap:6px;margin-bottom:7px}
@@ -477,6 +482,7 @@ footer b{color:var(--ink-2);font-weight:600}
 </div>
 
 <div id="aviso"></div>
+<div id="barraSel"></div>
 <div class="views" id="views"></div>
 
 <div class="tablewrap" id="tablawrap">
@@ -591,6 +597,8 @@ const FIJADO={};    // id -> false si ha subido a releer y no hay que bajarlo
 const EDITCHAT={};  // 'id|i' -> texto en edición de una respuesta ya generada del hilo
 const EDITBANCO={}; // slug -> {pregunta,texto} en edición de una entrada del banco
 const BORRAR_CONFIRMAR={}; // id -> true tras el primer clic en "Borrar definitivamente", hasta el segundo clic o cancelar
+const SELECCION = new Set();  // ids marcados con la casilla, para borrar varios a la vez
+let SELECCION_CONFIRMAR = false;  // true tras el primer clic en "Borrar seleccionadas"
 
 const hoy = () => new Date().toISOString().slice(0,10);
 const st = id => STATE[id] || {estado:'activa'};
@@ -680,18 +688,48 @@ function marcaGuardado(id){
    vez de un confirm() nativo, para no romper el estilo del resto del panel. */
 function marcarBorrado(id){ BORRAR_CONFIRMAR[id]=true; render(); }
 function cancelaBorrado(id){ delete BORRAR_CONFIRMAR[id]; render(); }
-async function borrarOferta(id){
-  delete BORRAR_CONFIRMAR[id];
-  if(openId===id) openId=null;
+
+/* Quita una oferta de verdad, en local y en la BD, sin tocar toast() ni
+   render(): lo comparten borrarOferta() (una) y borrarSeleccionadas() (varias
+   de golpe), que se encargan del aviso y del redibujado una sola vez cada una. */
+async function _borrarUno(id){
   const i = DATA.findIndex(r=>r.id===id);
   if(i>=0) DATA.splice(i,1);
   delete STATE[id]; delete DOCS[id]; delete CORREO[id]; delete MANUAL[id];
-  lsGuardar(); render();
-  toast('Oferta borrada definitivamente');
-  if(!db) return;
+  if(!db) return true;
   const cols = ['ofertas','tailor','estado','docs','correo','manual'];
   const r = await Promise.allSettled(cols.map(c=>db.doc(c+'/'+id).delete()));
-  if(r.some(x=>x.status==='rejected')) toast('Borrada aquí, pero puede que no del todo en la base de datos; revisa mañana');
+  return !r.some(x=>x.status==='rejected');
+}
+async function borrarOferta(id){
+  delete BORRAR_CONFIRMAR[id];
+  if(openId===id) openId=null;
+  SELECCION.delete(id);
+  const ok = await _borrarUno(id);
+  lsGuardar(); render();
+  toast(ok ? 'Oferta borrada definitivamente'
+           : 'Borrada aquí, pero puede que no del todo en la base de datos; revisa mañana');
+}
+
+/* Borrado múltiple (17 sep 2026): misma idea que el de una oferta, con el
+   mismo segundo clic de confirmación (SELECCION_CONFIRMAR en vez de un id
+   suelto en BORRAR_CONFIRMAR) pero un solo toast/render al final en vez de
+   uno por oferta. */
+function marcarBorrarSeleccion(){ if(SELECCION.size) SELECCION_CONFIRMAR=true; render(); }
+function cancelaBorrarSeleccion(){ SELECCION_CONFIRMAR=false; render(); }
+function deseleccionarTodas(){ SELECCION.clear(); SELECCION_CONFIRMAR=false; render(); }
+async function borrarSeleccionadas(){
+  const ids = Array.from(SELECCION);
+  if(!ids.length) return;
+  SELECCION_CONFIRMAR=false;
+  if(ids.includes(openId)) openId=null;
+  const resultados = await Promise.all(ids.map(_borrarUno));
+  SELECCION.clear();
+  lsGuardar(); render();
+  const fallos = resultados.filter(ok=>!ok).length;
+  toast(fallos
+    ? `Borradas ${ids.length-fallos} de ${ids.length}; revisa mañana las que hayan fallado`
+    : `${ids.length} oferta${ids.length===1?'':'s'} borrada${ids.length===1?'':'s'} definitivamente`);
 }
 const eur = n => n.toLocaleString('es-ES').replace(/ /g,' ')+' €';
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -745,7 +783,7 @@ function cols(){
   return base;
 }
 function renderHead(){
-  document.getElementById('head').innerHTML = cols().map(c=>{
+  document.getElementById('head').innerHTML = '<th class="selcol"><input type="checkbox" id="selall" title="Seleccionar todas las visibles"></th>' + cols().map(c=>{
     const on = c.k===sortK;
     const ar = on ? (sortDir===1?'▲':'▼') : '▲';
     return `<th class="${on?'on':''}"><button data-k="${c.k}" aria-label="Ordenar por ${esc(c.t)}">${esc(c.t)}<span class="arrow">${ar}</span></button></th>`;
@@ -755,6 +793,33 @@ function renderHead(){
     if(k===sortK) sortDir*=-1; else { sortK=k; sortDir = (cols().find(c=>c.k===k)||{}).num ? -1 : 1; }
     render();
   });
+  const selall = document.getElementById('selall');
+  if(selall) selall.onchange = () => {
+    const visibles = [...document.querySelectorAll('tr.r[data-id]')].map(tr=>tr.dataset.id);
+    visibles.forEach(id => selall.checked ? SELECCION.add(id) : SELECCION.delete(id));
+    render();
+  };
+}
+function renderBarraSel(){
+  const cont = document.getElementById('barraSel');
+  if(!cont) return;
+  const n = SELECCION.size;
+  if(!n){ cont.innerHTML=''; return; }
+  cont.innerHTML = SELECCION_CONFIRMAR
+    ? `<div class="selbar confirmar">
+         <span class="pt">Se borran <b>${n}</b> oferta${n===1?'':'s'} para siempre, sin deshacer.</span>
+         <button class="btn danger confirmar" id="selconf">Sí, borrar ${n} para siempre</button>
+         <button class="btn" id="selcancel">Cancelar</button>
+       </div>`
+    : `<div class="selbar">
+         <span class="pt"><b>${n}</b> seleccionada${n===1?'':'s'}</span>
+         <button class="btn danger" id="seldel">Borrar seleccionadas</button>
+         <button class="btn" id="seldeselec">Deseleccionar todas</button>
+       </div>`;
+  const b1=document.getElementById('seldel'); if(b1) b1.onclick=marcarBorrarSeleccion;
+  const b2=document.getElementById('seldeselec'); if(b2) b2.onclick=deseleccionarTodas;
+  const b3=document.getElementById('selconf'); if(b3) b3.onclick=borrarSeleccionadas;
+  const b4=document.getElementById('selcancel'); if(b4) b4.onclick=cancelaBorrarSeleccion;
 }
 
 const lineas = v => (Array.isArray(v)?v:[]).join('\n');
@@ -1300,7 +1365,7 @@ function brechaHTML(r){
 function detailHTML(r){
   const e = st(r.id);
   const strs = r.fuertes.map(s=>`<span class="tag str">${esc(s)}</span>`).join('');
-  return `<tr class="detail"><td colspan="${cols().length+1}"><div class="dwrap">
+  return `<tr class="detail"><td colspan="${cols().length+2}"><div class="dwrap">
     ${r.alerta?`<p class="alert"><b>Aviso.</b> ${esc(r.alerta)}</p>`:''}
     <div class="dgrid">
       <div>
@@ -1926,7 +1991,7 @@ function renderViews(){
   ].map(([v,t,c])=>`<button class="view ${vista===v?'on':''}" data-view="${v}">${t}<span class="n">${c}</span></button>`).join('');
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
     if(vista===b.dataset.view) return;
-    vista=b.dataset.view; openId=null;
+    vista=b.dataset.view; openId=null; SELECCION.clear(); SELECCION_CONFIRMAR=false;
     if(!vistaSeguimiento() && (sortK==='fase'||sortK==='fechaAplicacion'||sortK==='novedad')){ sortK='prioridad'; sortDir=-1; }
     render();
   });
@@ -1940,6 +2005,8 @@ function render(){
   renderViews();
   document.getElementById('tablawrap').hidden = vistaPanel();
   document.querySelector('.toolbar').hidden = vistaPanel();
+  document.getElementById('barraSel').hidden = vistaPanel();
+  renderBarraSel();
   document.getElementById('panelFiltradas').hidden = vista!=='filtrada';
   document.getElementById('panelEmbudo').hidden = vista!=='embudo';
   document.getElementById('panelHoy').hidden = vista!=='hoy';
@@ -1958,7 +2025,7 @@ function render(){
               : vista==='rechazada' ? 'Ninguna candidatura rechazada, de momento. Cuando te digan que no, abre la oferta y pon la fase en «Rechazada»: saldrá aquí y dejará de contar como proceso vivo.'
               : vista==='descartada' ? 'No has descartado ninguna oferta. Las que descartes con la ✕ aparecerán aquí y podrás recuperarlas.'
               : 'Ninguna oferta cumple estos filtros.';
-    tb.innerHTML=`<tr><td colspan="${cols().length+1}" class="empty">${msg}</td></tr>`; bind(); return; }
+    tb.innerHTML=`<tr><td colspan="${cols().length+2}" class="empty">${msg}</td></tr>`; bind(); return; }
   tb.innerHTML = rows.map(r=>{
     const rem = r.zona==='remoto';
     const det = openId===r.id ? detailHTML(r) : '';
@@ -1971,6 +2038,7 @@ function render(){
       ? `<td><button class="rebtn" data-restore="${r.id}">Recuperar</button></td>`
       : `<td><button class="xbtn" data-discard="${r.id}" title="Descartar esta oferta" aria-label="Descartar ${esc(r.empresa)}">✕</button></td>`;
     return `<tr class="r ${openId===r.id?'open':''}" data-id="${r.id}">
+      <td class="selcol"><input type="checkbox" data-sel="${r.id}" aria-label="Seleccionar ${esc(r.empresa)}" ${SELECCION.has(r.id)?'checked':''}></td>
       <td class="co">${esc(r.empresa)}</td>
       <td class="pt">${esc(r.puesto)}</td>
       ${extra}
@@ -2002,8 +2070,13 @@ function bind(){
     if(tr) tr.scrollIntoView({block:'center'});
   });
   document.querySelectorAll('tr.r').forEach(tr=>tr.onclick=e=>{
-    if(e.target.closest('a,button')) return;
+    if(e.target.closest('a,button,input,label,.selcol')) return;
     openId = openId===tr.dataset.id ? null : tr.dataset.id; render();
+  });
+  document.querySelectorAll('[data-sel]').forEach(cb=>cb.onchange=()=>{
+    const id=cb.dataset.sel;
+    if(cb.checked) SELECCION.add(id); else SELECCION.delete(id);
+    render();
   });
   document.querySelectorAll('[data-dl]').forEach(b=>b.onclick=()=>download(b.dataset.id,b.dataset.dl));
   document.querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>generarCV(b.dataset.cv));

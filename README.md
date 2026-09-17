@@ -1,5 +1,7 @@
 # radar-pipeline
 
+THIS IS MY PERSONAL VERSION OF JOBRADAR, FOR MY PERSONAL USE.
+
 Motor del **Radar de ofertas**: puntúa ofertas de empleo contra un CV real y construye
 el dashboard desde el que se trabajan.
 

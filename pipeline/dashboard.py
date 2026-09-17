@@ -1,9 +1,27 @@
 # -*- coding: utf-8 -*-
-import os, sys, json
+import os, re, sys, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tailor import T
 
 RES = json.load(open('data/resultado.json'))
+
+# Candado anti-«Senior» (16 sep 2026): a Íñigo no le corresponde presentarse
+# como sénior todavía, así que se quita del titular pase lo que pase, aunque
+# el título del anuncio lo lleve o se cuele en `tailor`. Es determinista, no
+# depende de que la tarea diaria se acuerde de evitarlo, y limpia también las
+# ofertas ya cargadas la próxima vez que se regenera el dashboard.
+_SENIOR_RE = re.compile(r'(?i)\b(senior|s[eé]nior|sr\.?)\b')
+
+
+def _limpia_titular(t):
+    if not t:
+        return t
+    t = _SENIOR_RE.sub('', t)
+    t = re.sub(r'\(\s*\)', '', t)                  # paréntesis que quedan vacíos
+    t = re.sub(r'\s{2,}', ' ', t)                   # huecos dobles
+    t = re.sub(r'^[\s/\-·]+|[\s/\-·]+$', '', t)     # separador colgante al inicio/final
+    t = re.sub(r'\s*/\s*/\s*', ' / ', t)            # doble barra si el hueco caía entre dos
+    return t.strip()
 
 
 def _opcional(nombre, defecto):
@@ -26,8 +44,9 @@ for r in RES:
       salMin=r['sal_min'], salMax=r['sal_max'], salMedio=r['sal_medio'], salOrigen=r['sal_origen'],
       salBase=r['sal_base'], url=r['url'], scoreOrig=r['score_orig'], scoreAdap=r['score_adap'],
       delta=r['delta'], mejora=r['mejora_pct'], fuertes=r['fuertes'], huecos=r['huecos'],
-      alerta=r.get('alerta',''), titular=T[r['id']]['titular'],
+      alerta=r.get('alerta',''), titular=_limpia_titular(T[r['id']]['titular']),
       resumen=T[r['id']]['resumen'], familia=T[r['id']]['familia'],
+      skillsExtra=T[r['id']].get('skills_extra') or '',
       reqs=[f"{l} (peso {w})" for _,w,l in sorted(r['reqs'], key=lambda x:-x[1])[:12]],
       zona=('local' if ('Navarra' in r['modalidad'] or 'Gipuzkoa' in r['modalidad']) else 'remoto'),
       ambito=r['ambito'],
@@ -48,6 +67,22 @@ from base_cv import (BULLETS_ES, BULLETS_EN, SKILLS_ES, SKILLS_EN, CONTACTO,
                       ORDEN, ORDEN_SKILLS, CV_LABELS, PERFIL_LLM,
                       TFM_VARIANT, TFG_VARIANT)
 from datos import PERFIL as _PERFIL_DOC
+
+# Añadir oferta a mano (16 sep 2026): el botón "+" del dashboard reconstruye,
+# en el navegador y con la capacidad `sample`, el mismo trabajo que hoy hace
+# la tarea diaria a mano en el Paso 6 -- reqs, familia, titular/resumen,
+# salario si falta. Para que no diverja de las reglas reales, estas tablas se
+# incrustan tal cual desde su fuente en el repo, no se retipean en JS:
+# `pipeline/aprendizaje.py` (prioridad por familia y dificultad de huecos),
+# `pipeline/foco.py` (antigüedad/sénior) y `pipeline/bandas.json` (salario
+# estimado). Si esos ficheros cambian, el dashboard los recoge solo en la
+# siguiente publicación.
+from aprendizaje import PESO_FAMILIA, PESO_FAMILIA_DEFECTO, DIFICULTAD, DEFECTO as DIFICULTAD_DEFECTO
+from foco import SENIOR as _SENIOR_RE_FOCO, FRESCURA, PENALIZACION_SENIOR, BONUS_SALARIO_PUBLICADO
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vocabulario.md'), encoding='utf-8') as _fh:
+    VOCABULARIO_MD = _fh.read()
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bandas.json'), encoding='utf-8') as _fh:
+    BANDAS = _fh.read()  # ya es JSON válido tal cual; se pasa sin retocar
 from experiencia import anios_perfil, MARGEN_DEF
 
 # Los años de experiencia del CV, sumados de las fechas de sus puestos. Se
@@ -166,6 +201,12 @@ button{font-family:inherit;cursor:pointer}
 .notas{width:100%;min-height:84px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.55;
   color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
 .notas:focus{outline:2px solid var(--accent);outline-offset:1px}
+.burb.editando textarea,.bfila.editando textarea,.bfila.editando input[type=text]{
+  width:100%;resize:vertical;font-family:inherit;font-size:13px;line-height:1.55;
+  color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.burb.editando textarea:focus,.bfila.editando textarea:focus,.bfila.editando input[type=text]:focus{
+  outline:2px solid var(--accent);outline-offset:1px}
+.bfila.editando{background:var(--surface)}
 .track{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
 .saved{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);opacity:0;transition:.2s}
 .saved.on{opacity:1}
@@ -267,6 +308,10 @@ td{padding:11px 10px;vertical-align:top}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .btn.primary:hover{filter:brightness(1.08);color:var(--on-accent)}
+.btn.danger{background:none;border-color:var(--crit);color:var(--crit)}
+.btn.danger:hover{background:var(--crit-bg);border-color:var(--crit);color:var(--crit)}
+.btn.danger.confirmar{background:var(--crit);border-color:var(--crit);color:#fff}
+.btn.danger.confirmar:hover{filter:brightness(1.08);color:#fff}
 .btn:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 .tabs{display:flex;gap:6px;margin-bottom:7px}
@@ -396,7 +441,10 @@ footer b{color:var(--ink-2);font-weight:600}
       <p class="eyebrow">Actualizado el __FECHA__ · __N__ ofertas en el radar</p>
       <h1>Radar de ofertas</h1>
     </div>
-    <button class="cfgbtn" id="cfgbtn">Configuración</button>
+    <div style="display:flex;gap:8px;flex:none;margin-top:6px">
+      <button class="cfgbtn" id="nuevabtn" title="Añadir una oferta a mano" aria-label="Añadir oferta">+ Oferta</button>
+      <button class="cfgbtn" id="cfgbtn">Configuración</button>
+    </div>
   </div>
   <p class="sub">Ofertas recientes que encajan con tu perfil: 100&nbsp;% remoto desde España o desde el extranjero, y presencial o híbrido en Navarra y Gipúzcoa. Rastreadas en LinkedIn, InfoJobs, JSearch (Google for Jobs), Tecnoempleo, Indeed y los portales de empleo remoto. El CV adaptado, la cover letter y el correo a RRHH se generan desde dentro de la oferta, con un botón, sólo para las que te interesen. Pulsa cualquier fila para abrirla, o «Configuración» para cambiar qué se busca: la tarea diaria lo lee antes de cada ejecución.</p>
 </header>
@@ -458,6 +506,7 @@ footer b{color:var(--ink-2);font-weight:600}
 </footer>
 </div>
 <div id="cfgmodal"></div>
+<div id="nuevamodal"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -471,6 +520,17 @@ const ANIOS_PERFIL = __ANIOS_PERFIL__;   // años de experiencia sumados de su C
 const MARGEN_DEF = __MARGEN_DEF__;
 const LINT = __LINT__;                   // banderas rojas del CV base (pipeline/lint.py)
 const EVIDENCIA = __EVIDENCIA__;         // término -> 0 / 0.5 / 1.0, para validar lo generado
+const TECHO = __TECHO__;                 // término -> techo si se saca a un bullet (perfil.py)
+const PESO_FAMILIA = __PESO_FAMILIA__;   // aprendizaje.py: empuje de IA/DS en el orden por defecto
+const PESO_FAMILIA_DEFECTO = __PESO_FAMILIA_DEFECTO__;
+const DIFICULTAD = __DIFICULTAD__;       // aprendizaje.py: nivel/nota de cada hueco posible
+const DIFICULTAD_DEFECTO = __DIFICULTAD_DEFECTO__;
+const SENIOR_RE_FOCO = new RegExp(__SENIOR_RE_FOCO__, 'i');   // foco.py
+const FRESCURA = __FRESCURA__;                                 // foco.py
+const PENALIZACION_SENIOR = __PENALIZACION_SENIOR__;           // foco.py
+const BONUS_SALARIO_PUBLICADO = __BONUS_SALARIO_PUBLICADO__;   // foco.py
+const VOCABULARIO_MD = __VOCABULARIO_MD__;   // pipeline/vocabulario.md, para el prompt de extracción
+const BANDAS = __BANDAS__;                   // pipeline/bandas.json, para estimar salario
 const FAMILIA_ES = {genai:'GenAI / LLM', ml:'Machine Learning', cv:'Computer Vision',
   ds:'Data Science / Eng.', mlops:'MLOps', backend:'Full Stack / Backend', research:'Investigación',
   general:'General / Perfil abierto'};
@@ -502,7 +562,8 @@ const CFG_DEF={
            "Data Scientist","Data Engineer","Full Stack Developer","Backend Developer",
            "Software Engineer","Python Developer","MLOps Engineer","Forward Deployed Engineer"],
   keywords:[], excluir_keywords:[], excluir_empresas:["Hired","Hire Feed"],
-  solo_remoto:true, areas_locales:["Navarra","Gipuzkoa"],
+  buscar_remoto:true, buscar_hibrido:false, buscar_presencial:false,
+  areas_locales:["Navarra","Gipuzkoa"],
   ambitos:["España","Internacional","Navarra / Gipuzkoa"],
   salario_min:45000, exigir_salario_publicado:false,
   anios_perfil:null, margen_anios:MARGEN_DEF,
@@ -518,6 +579,8 @@ const OBJ_DEF=10;   // candidaturas por semana; se cambia desde la pestaña «Ho
 let STATE={}, DOCS={}, CORREO={}, BANCO={}, db=null, dbListo=false, dbFallo=false;
 let CFG=Object.assign({},CFG_DEF), cfgAbierta=false, cfgGuardando=false;
 let sampleNs=null, sampleTried=false;
+let nuevaAbierta=false, nuevaGuardando=false, nuevaMsg='', MANUAL={};
+let bancoAbierto=false;  // si el <details> del banco de respuestas está desplegado; render() lo rehace entero y si no se recuerda se cierra solo al editar/guardar
 const GEN={};   // id -> {carta:{texto,estado},mail:{...}} en curso
 const CHAT={};      // id -> {texto, ctrl} de la respuesta que se está escribiendo
 const BORRADOR={};  // id -> lo que hay escrito en el compositor, que render() borraría
@@ -525,6 +588,9 @@ const LIMITE={};    // id -> {n, unidad} del formulario de esa oferta
 const VISTO={};     // id -> mensajes ya pintados, para bajar el hilo sólo cuando crece
 const SCROLL={};    // id -> dónde estaba leyendo, que render() se lleva por delante
 const FIJADO={};    // id -> false si ha subido a releer y no hay que bajarlo
+const EDITCHAT={};  // 'id|i' -> texto en edición de una respuesta ya generada del hilo
+const EDITBANCO={}; // slug -> {pregunta,texto} en edición de una entrada del banco
+const BORRAR_CONFIRMAR={}; // id -> true tras el primer clic en "Borrar definitivamente", hasta el segundo clic o cancelar
 
 const hoy = () => new Date().toISOString().slice(0,10);
 const st = id => STATE[id] || {estado:'activa'};
@@ -565,6 +631,20 @@ async function initEstado(){
     snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
     STATE=nuevo; dbListo=true; lsGuardar(); render();
   }, e=>{ dbFallo=true; dbListo=true; render(); });
+  /* Ofertas añadidas a mano con el botón "+" (16 sep 2026). `DATA` es una
+     constante horneada en la última publicación: esto es el puente hasta que
+     la tarea de mañana la recoja de verdad en `ofertas`/`tailor` y la
+     publicación de mañana la hornee dentro de `DATA`. A partir de ahí este
+     documento sobra pero no molesta -- `fila()` no vuelve a tocar un id que
+     ya está en `DATA`. */
+  db.collection('manual').onSnapshot(snap=>{
+    snap.docs.forEach(d=>{
+      const v=d.data(); if(!v) return;
+      MANUAL[d.id]=v;
+      if(!DATA.some(r=>r.id===d.id)) DATA.push(v);
+    });
+    render();
+  }, e=>{});
 }
 
 let guardando=0;
@@ -590,6 +670,28 @@ function marcaGuardado(id){
   const el=document.getElementById('saved-'+id);
   if(!el) return; el.textContent='Guardado'; el.classList.add('on');
   setTimeout(()=>el.classList.remove('on'),1600);
+}
+
+/* Pide "Borrar definitivamente" (16 sep 2026). A diferencia de "Descartar" (que
+   sólo cambia estado y nunca esconde la ficha, ver detailHTML), esto quita la
+   oferta de verdad: de la tabla ahora mismo y de la base de datos para que la
+   publicación de mañana no la vuelva a hornear dentro de DATA. No hay
+   deshacer, así que exige un segundo clic (marcarBorrado/cancelaBorrado) en
+   vez de un confirm() nativo, para no romper el estilo del resto del panel. */
+function marcarBorrado(id){ BORRAR_CONFIRMAR[id]=true; render(); }
+function cancelaBorrado(id){ delete BORRAR_CONFIRMAR[id]; render(); }
+async function borrarOferta(id){
+  delete BORRAR_CONFIRMAR[id];
+  if(openId===id) openId=null;
+  const i = DATA.findIndex(r=>r.id===id);
+  if(i>=0) DATA.splice(i,1);
+  delete STATE[id]; delete DOCS[id]; delete CORREO[id]; delete MANUAL[id];
+  lsGuardar(); render();
+  toast('Oferta borrada definitivamente');
+  if(!db) return;
+  const cols = ['ofertas','tailor','estado','docs','correo','manual'];
+  const r = await Promise.allSettled(cols.map(c=>db.doc(c+'/'+id).delete()));
+  if(r.some(x=>x.status==='rejected')) toast('Borrada aquí, pero puede que no del todo en la base de datos; revisa mañana');
 }
 const eur = n => n.toLocaleString('es-ES').replace(/ /g,' ')+' €';
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -683,8 +785,15 @@ function cfgHTML(){
       </div></fieldset>
 
       <fieldset><legend>Dónde</legend><div class="cgrid">
-        <div class="cf full"><label class="chk"><input type="checkbox" id="c-rem" ${c.solo_remoto?'checked':''}>Sólo 100 % remoto, salvo en las zonas de abajo</label></div>
-        <div class="cf"><label for="c-loc">Zonas donde aceptas presencial o híbrido</label>
+        <div class="cf full"><label>Modalidades que buscas</label>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+            <label class="chk"><input type="checkbox" id="c-rem" ${c.buscar_remoto?'checked':''}>Remoto</label>
+            <label class="chk"><input type="checkbox" id="c-hib" ${c.buscar_hibrido?'checked':''}>Híbrido</label>
+            <label class="chk"><input type="checkbox" id="c-pre" ${c.buscar_presencial?'checked':''}>Presencial</label>
+          </div>
+          <span class="h">Apaga híbrido y presencial para buscar sólo en remoto. Las zonas de abajo se
+            aceptan en cualquier modalidad, aunque las de aquí arriba estén apagadas.</span></div>
+        <div class="cf"><label for="c-loc">Zonas donde aceptas cualquier modalidad</label>
           <span class="h">Una por línea.</span>
           <textarea id="c-loc">${esc(lineas(c.areas_locales))}</textarea></div>
         <div class="cf"><label>Ámbitos que cuentan</label>
@@ -739,7 +848,9 @@ async function guardaCfg(){
     keywords: aLista(document.getElementById('c-kw').value),
     excluir_keywords: aLista(document.getElementById('c-xkw').value),
     excluir_empresas: aLista(document.getElementById('c-xemp').value),
-    solo_remoto: document.getElementById('c-rem').checked,
+    buscar_remoto: document.getElementById('c-rem').checked,
+    buscar_hibrido: document.getElementById('c-hib').checked,
+    buscar_presencial: document.getElementById('c-pre').checked,
     areas_locales: aLista(document.getElementById('c-loc').value),
     ambitos: leeMarcados('ambitos'),
     salario_min: numOnull('c-sal'),
@@ -752,6 +863,9 @@ async function guardaCfg(){
   };
   if(!nuevo.titulos.length){ document.getElementById('cfgmsg').textContent='Deja al menos un puesto objetivo.'; return; }
   if(!nuevo.fuentes.length){ document.getElementById('cfgmsg').textContent='Deja al menos una fuente activa.'; return; }
+  if(!nuevo.buscar_remoto && !nuevo.buscar_hibrido && !nuevo.buscar_presencial && !(nuevo.areas_locales||[]).length){
+    document.getElementById('cfgmsg').textContent='Marca al menos una modalidad, o deja alguna zona local.'; return;
+  }
   CFG = Object.assign({},CFG_DEF,nuevo);
   cfgGuardando=true; pintaCfg();
   if(!db){ cfgGuardando=false; cierraCfg(); toast('Guardado sólo en este navegador: no hay almacenamiento compartido'); return; }
@@ -761,6 +875,385 @@ async function guardaCfg(){
   }catch(e){
     cfgGuardando=false; pintaCfg();
     document.getElementById('cfgmsg').textContent='No se ha podido guardar; inténtalo otra vez.';
+  }
+}
+
+/* ============================================================
+   Añadir oferta a mano (botón "+", 16 sep 2026)
+   ============================================================
+   El botón "+" reconstruye en el navegador, con la capacidad `sample`, el
+   mismo trabajo que la tarea diaria hace a mano en su Paso 6: sacar `reqs`
+   del anuncio, elegir familia, escribir titular/resumen y, si falta,
+   estimar el salario. Para no reinventar (ni desincronizar) las reglas
+   reales, las tablas que gobiernan ese trabajo -- vocabulario.md,
+   bandas.json, aprendizaje.py, foco.py -- llegan tal cual desde el propio
+   repo (ver el Python que arma esta página) en vez de retipearse aquí.
+
+   El candado anti-invención de siempre se aplica DOS VECES: primero en el
+   prompt (le decimos a Claude las mismas reglas que sigue el resto del
+   dashboard), y después EN CÓDIGO sobre lo que devuelve, exactamente igual
+   que ya hace `perfil.py` con el CV determinista: `surfaced` y
+   `skills_extra` se filtran contra `EVIDENCIA` pase lo que pase en el JSON,
+   así que un fallo del modelo no puede colar algo que no tiene. */
+
+const RE_SENIOR_TITULAR = /\b(senior|s[eé]nior|sr\.?)\b/ig;
+function limpiaTitular(t){
+  if(!t) return t;
+  t = t.replace(RE_SENIOR_TITULAR,'');
+  t = t.replace(/\(\s*\)/g,'');
+  t = t.replace(/\s{2,}/g,' ');
+  t = t.replace(/^[\s/\-·]+|[\s/\-·]+$/g,'');
+  t = t.replace(/\s*\/\s*\/\s*/g,' / ');
+  return t.trim();
+}
+
+function pesoFamilia(familia){
+  return PESO_FAMILIA[familia] != null ? PESO_FAMILIA[familia] : PESO_FAMILIA_DEFECTO;
+}
+
+function diasDesde(publicada){
+  if(!publicada) return null;
+  const d = new Date(String(publicada).slice(0,10)+'T00:00:00');
+  if(isNaN(d.getTime())) return null;
+  return Math.round((Date.now()-d.getTime())/86400000);
+}
+function frescura(dias){
+  if(dias==null) return [1.0,''];
+  for(const par of FRESCURA){ if(dias<=par[0]) return [par[1],par[2]]; }
+  const ult = FRESCURA[FRESCURA.length-1];
+  return [ult[1], ult[2]];
+}
+/* Puerto de pipeline/foco.py: antigüedad y títulos de sénior restan sobre
+   `prioridad`, nunca sobre `scoreAdap` -- ver la cabecera de ese fichero. */
+function calculaFoco(puesto, publicada, salOrigen, prioridad){
+  const dias = diasDesde(publicada);
+  const fr = frescura(dias);
+  let factor = fr[0];
+  const motivos = fr[1] ? [fr[1]] : [];
+  if(SENIOR_RE_FOCO.test(puesto||'')){
+    factor *= PENALIZACION_SENIOR;
+    motivos.push('el título pide un perfil sénior o de arquitecto');
+  }
+  if(salOrigen==='publicado'){
+    factor *= BONUS_SALARIO_PUBLICADO;
+    motivos.push('publica la banda salarial');
+  }
+  return { foco: Math.round(prioridad*factor*10)/10, dias, motivoFoco: motivos.join('; ') };
+}
+
+/* Puerto de pipeline/perfil.py: la prominencia adaptada NUNCA sube de 0 si
+   no hay evidencia real, esté o no en `surfaced`. */
+function prominenciaAdaptada(k, surfacedSet){
+  const base = EVIDENCIA[k] || 0;
+  if(base === 0) return 0;
+  if(surfacedSet.has(k)) return Math.max(base, TECHO[k] != null ? TECHO[k] : base);
+  return base;
+}
+/* Puerto de pipeline/puntuar.py: score(). `reqs` es [[clave,peso,etiqueta],...]. */
+function puntuarOferta(reqs, surfaced){
+  const surfacedSet = new Set(surfaced||[]);
+  const tot = reqs.reduce((a,r)=>a+r[1], 0) || 1;
+  const orig = reqs.reduce((a,r)=>a+r[1]*(EVIDENCIA[r[0]]||0), 0);
+  const adap = reqs.reduce((a,r)=>a+r[1]*prominenciaAdaptada(r[0],surfacedSet), 0);
+  const huecos = reqs.filter(r=>(EVIDENCIA[r[0]]||0)===0).sort((a,b)=>b[1]-a[1]).map(r=>r[2]);
+  const fuertes = reqs.filter(r=>(EVIDENCIA[r[0]]||0)>=0.7).sort((a,b)=>b[1]-a[1]).map(r=>r[2]);
+  return {
+    scoreOrig: Math.round(1000*orig/tot)/10,
+    scoreAdap: Math.round(1000*adap/tot)/10,
+    huecos: huecos.slice(0,5), fuertes: fuertes.slice(0,5),
+  };
+}
+/* Puerto de pipeline/aprendizaje.py: brecha_aprendizaje(). Sólo informativo:
+   nunca toca el CV ni la carta, sólo el panel de huecos de la ficha. */
+function brechaAprendizaje(reqs){
+  const items = reqs.filter(r=>(EVIDENCIA[r[0]]||0)===0).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  return items.map(r=>{
+    const dif = DIFICULTAD[r[0]] || DIFICULTAD_DEFECTO;
+    return {clave:r[0], etiqueta:r[2], peso:r[1], nivel:dif[0], nota:dif[1]};
+  });
+}
+/* Puerto de pipeline/bandas.json ("como_usar"): banda por familia y tipo de
+   empresa, por el factor del país de contratación, con hasta dos ajustes, y
+   redondeo a millares. Claude sólo clasifica (familia ya la decide él mismo,
+   tipo de empresa y país los devuelve en "salario"); la aritmética, y por
+   tanto la cifra final, sale siempre de aquí, nunca de lo que diga el texto. */
+function estimaSalario(familia, tipoEmpresa, pais, ajustes){
+  const bandaFam = BANDAS.bandas[familia] || BANDAS.bandas.general;
+  const banda = bandaFam[tipoEmpresa] || bandaFam.producto_espana;
+  const paisInfo = BANDAS.paises[pais] || BANDAS.paises.espana;
+  let f = paisInfo.factor;
+  const notasAj = [];
+  (ajustes||[]).slice(0,2).forEach(k=>{
+    const aj = BANDAS.ajustes[k];
+    if(aj){ f *= aj.factor; notasAj.push(aj.nota); }
+  });
+  const salMin = Math.round(banda[0]*f/1000)*1000;
+  const salMax = Math.round(banda[1]*f/1000)*1000;
+  const tipoTxt = BANDAS.tipos_empresa[tipoEmpresa] ? tipoEmpresa : (tipoEmpresa||'sin clasificar');
+  let base = `Estimado (no publicado): familia ${familia}, tipo de empresa ${tipoTxt}, `
+           + `país de contratación ${pais||'espana'} (factor ${paisInfo.factor})`;
+  if(notasAj.length) base += `, ajustes: ${notasAj.join(' / ')}`;
+  base += '. Redondeado a millares -- ver pipeline/bandas.json.';
+  return {salMin, salMax, salBase: base};
+}
+
+const normTxt = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+/* `skills_extra` sujeto al mismo candado que el resto del CV: sólo entra un
+   término si aparece de verdad en ALGUNA variante de skills_es/skills_en del
+   perfil real, nunca porque el anuncio lo pida. Ver vocabulario.md. */
+function filtraSkillsExtra(txt){
+  if(!txt) return '';
+  const bolsas = [];
+  ['skills_es','skills_en'].forEach(idi=>{
+    const variantes = CV[idi]||{};
+    Object.keys(variantes).forEach(v=>{
+      const cats = variantes[v]||{};
+      Object.keys(cats).forEach(c=>bolsas.push(String(cats[c]||'')));
+    });
+  });
+  const blob = normTxt(bolsas.join(' | '));
+  const terms = String(txt).split(',').map(s=>s.trim()).filter(Boolean);
+  return terms.filter(t=>t && blob.includes(normTxt(t))).slice(0,4).join(', ');
+}
+
+function parseaJSON(texto){
+  if(!texto) return null;
+  let t = String(texto).trim();
+  const bloque = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if(bloque) t = bloque[1].trim();
+  const ini = t.indexOf('{'), fin = t.lastIndexOf('}');
+  if(ini<0 || fin<ini) return null;
+  try{ return JSON.parse(t.slice(ini, fin+1)); }catch(e){ return null; }
+}
+
+function promptExtraccion(o){
+  return `Estás ayudando a Íñigo a dar de alta a mano, en su propio radar de búsqueda de empleo, una
+oferta que él ya ha leído fuera del sistema. Sigue exactamente el mismo criterio que su tarea
+automática diaria: el vocabulario y las bandas salariales de abajo son la única fuente de verdad,
+no inventes una clave nueva si ya existe una parecida.
+
+PERFIL (datos reales -- nunca le atribuyas nada que no esté aquí):
+${JSON.stringify(PERFIL)}
+
+VOCABULARIO.MD -- claves de "reqs", escala de pesos y trampas conocidas:
+${VOCABULARIO_MD}
+
+BANDAS.JSON -- para clasificar tipo de empresa y país de contratación (NO calcules tú la cifra final, sólo clasifica; el sistema hace la aritmética):
+${JSON.stringify(BANDAS)}
+
+OFERTA A DAR DE ALTA:
+Empresa: ${o.empresa}
+Puesto: ${o.puesto}
+Ubicación: ${o.ubicacion}
+Modalidad: ${o.modalidad}
+Idioma de la oferta: ${o.idioma === 'en' ? 'inglés' : 'español'}
+Descripción completa, tal cual la pegó él:
+${o.descripcion}
+
+TAREA: devuelve SOLO un JSON válido (sin markdown, sin comentarios, sin texto antes ni después) con
+esta forma exacta:
+{
+ "familia": "genai|ml|cv|ds|mlops|research|backend|general",
+ "titular": "titular corto del CV adaptado a esta oferta; NUNCA 'Senior'/'Sénior'/'Sr.' aunque el puesto lo lleve",
+ "resumen": "2-3 frases, máximo 240 caracteres, en el idioma de la oferta: quién es, el logro que conecta con esta oferta y opcionalmente las tecnologías clave",
+ "skills_extra": "0 a 4 términos que SÍ tiene y la variante de su familia no saca, separados por coma, o cadena vacía",
+ "reqs": [["clave_de_vocabulario", peso_1_a_10, "etiqueta con las palabras del anuncio"], "..."],
+ "surfaced": ["claves de reqs que el resumen/titular sacan a relucir -- SOLO si tiene evidencia > 0 en el PERFIL"],
+ "anios_min": numero_de_anios_que_pide_el_anuncio_o_null,
+ "alerta": "aviso corto si algo merece ojo -- intermediaria sin nombrar cliente, banda de otro país, dato ambiguo -- o cadena vacía",
+ "salario": {"tipo_empresa": "producto_internacional|producto_espana|consultora|gran_empresa_final|centro_tecnologico",
+             "pais_contratacion": "una clave de bandas.json.paises, espana si no se dice otra cosa",
+             "ajustes": ["hasta 2 claves de bandas.json.ajustes que apliquen, o array vacío"]}
+}
+
+Recuerda el candado, igual que en el resto del dashboard: "surfaced" y "skills_extra" JAMÁS pueden
+llevar algo que el PERFIL no demuestra, aunque el anuncio lo pida -- eso es un hueco, no una
+competencia. Devuelve siempre el campo "salario" con tu mejor clasificación, aunque el usuario ya
+vaya a poner la cifra a mano.`;
+}
+
+function nuevoId(empresa, puesto){
+  return 'manual-' + slug((empresa||'')+'-'+(puesto||'')).toLowerCase() + '-' + Date.now().toString(36).slice(-5);
+}
+
+function nuevaHTML(){
+  const hoyIso = new Date().toISOString().slice(0,10);
+  return `<div class="modal" role="dialog" aria-modal="true" aria-label="Añadir oferta a mano"><div class="box">
+    <h2>Añadir oferta a mano</h2>
+    <div class="body">
+      <p class="cfgnota">Pega la descripción tal cual la has leído. Claude saca los requisitos, adapta tu titular y tu resumen a esta oferta y, si no publica salario, lo estima con las mismas tablas que usa la tarea diaria -- con el mismo candado anti-invención de siempre: nunca te atribuye algo que no tienes.</p>
+      <fieldset><legend>La oferta</legend><div class="cgrid">
+        <div class="cf"><label for="n-empresa">Empresa</label><input type="text" id="n-empresa"></div>
+        <div class="cf"><label for="n-puesto">Puesto</label><input type="text" id="n-puesto"></div>
+        <div class="cf full"><label for="n-desc">Descripción del puesto</label>
+          <span class="h">El texto completo del anuncio. Cuanto más completo, mejor sale la adaptación y la puntuación.</span>
+          <textarea id="n-desc" style="min-height:170px"></textarea></div>
+        <div class="cf"><label for="n-ubicacion">Ubicación</label><input type="text" id="n-ubicacion" placeholder="Madrid, España (remoto)…"></div>
+        <div class="cf"><label for="n-url">Enlace al anuncio (opcional)</label><input type="text" id="n-url" placeholder="https://…"></div>
+      </div></fieldset>
+      <fieldset><legend>Dónde y cuándo</legend><div class="cgrid">
+        <div class="cf"><label for="n-modalidad">Modalidad</label>
+          <select id="n-modalidad"><option value="100% remoto">100% remoto</option><option value="Híbrido">Híbrido</option><option value="Presencial">Presencial</option></select></div>
+        <div class="cf"><label class="chk" style="margin-top:22px"><input type="checkbox" id="n-local">Está en Navarra o Gipuzkoa</label></div>
+        <div class="cf"><label for="n-ambito">Ámbito</label>
+          <select id="n-ambito">${AMBITOS_POS.map(a=>`<option>${esc(a)}</option>`).join('')}</select></div>
+        <div class="cf"><label for="n-idioma">Idioma de la oferta</label>
+          <select id="n-idioma"><option value="es">Español</option><option value="en">Inglés</option></select></div>
+        <div class="cf"><label for="n-publicada">Fecha de publicación</label>
+          <input type="date" id="n-publicada" value="${hoyIso}"></div>
+      </div></fieldset>
+      <fieldset><legend>Salario</legend><div class="cgrid">
+        <div class="cf"><label for="n-salmin">Mínimo (€ brutos/año, opcional)</label><input type="number" id="n-salmin" min="0" step="1000"></div>
+        <div class="cf"><label for="n-salmax">Máximo (€ brutos/año, opcional)</label><input type="number" id="n-salmax" min="0" step="1000"></div>
+        <div class="cf full"><span class="h">Déjalo en blanco si el anuncio no publica banda: se estima y queda marcada como «Estimado», igual que el resto del radar.</span></div>
+      </div></fieldset>
+      <fieldset><legend>Estado inicial</legend><div class="cgrid">
+        <div class="cf"><label for="n-estado">Estado</label>
+          <select id="n-estado"><option value="activa">Activa</option><option value="aplicada">Ya aplicada</option><option value="descartada">Descartada</option></select></div>
+        <div class="cf" id="n-fase-wrap" hidden><label for="n-fase">Fase</label>
+          <select id="n-fase">${FASES.map(f=>`<option value="${f}">${esc(FASE_ES[f])}</option>`).join('')}</select></div>
+        <div class="cf full"><label for="n-notas">Notas (opcional)</label><textarea id="n-notas"></textarea></div>
+      </div></fieldset>
+    </div>
+    <div class="foot">
+      <span class="pt" id="nuevamsg" style="margin-right:auto;font-size:12.5px">${esc(nuevaMsg)}</span>
+      <button class="btn" id="nuevacancel">Cancelar</button>
+      <button class="btn primary" id="nuevaguardar">${nuevaGuardando?'Generando…':'Añadir y adaptar CV'}</button>
+    </div>
+  </div></div>`;
+}
+function pintaNueva(){
+  const cont=document.getElementById('nuevamodal');
+  cont.innerHTML = nuevaAbierta ? nuevaHTML() : '';
+  if(!nuevaAbierta) return;
+  document.getElementById('nuevacancel').onclick = cierraNueva;
+  document.getElementById('nuevaguardar').onclick = guardaNueva;
+  document.getElementById('n-estado').onchange = e=>{
+    document.getElementById('n-fase-wrap').hidden = e.target.value!=='aplicada';
+  };
+  cont.querySelector('.modal').onclick = e=>{ if(e.target===cont.querySelector('.modal')) cierraNueva(); };
+}
+function abreNueva(){ nuevaAbierta=true; nuevaMsg=''; pintaNueva(); }
+function cierraNueva(){ if(nuevaGuardando) return; nuevaAbierta=false; pintaNueva(); }
+
+async function guardaNueva(){
+  if(nuevaGuardando) return;
+  const val = id => document.getElementById(id).value.trim();
+  const empresa = val('n-empresa'), puesto = val('n-puesto'), descripcion = val('n-desc');
+  if(!empresa || !puesto || !descripcion){
+    nuevaMsg = 'Empresa, puesto y descripción son obligatorios.'; pintaNueva(); return;
+  }
+  if(!sampleTried){ sampleTried=true; try{ sampleNs = await claude.use('sample'); }catch(e){ sampleNs=null; } }
+  if(!sampleNs){ nuevaMsg='La generación con Claude no está disponible en esta vista.'; pintaNueva(); return; }
+
+  const ubicacion = val('n-ubicacion') || '—';
+  const modalidad = document.getElementById('n-modalidad').value;
+  const local = document.getElementById('n-local').checked;
+  const ambito = document.getElementById('n-ambito').value;
+  const idioma = document.getElementById('n-idioma').value;
+  const url = val('n-url');
+  const publicada = val('n-publicada') || new Date().toISOString().slice(0,10);
+  const salMinUser = numOnull('n-salmin'), salMaxUser = numOnull('n-salmax');
+  const estadoIni = document.getElementById('n-estado').value;
+  const fase = document.getElementById('n-fase').value;
+  const notas = val('n-notas');
+
+  nuevaGuardando=true;
+  nuevaMsg='Leyendo la descripción, adaptando el CV y calculando el encaje…'; pintaNueva();
+
+  let extra;
+  try{
+    const res = await sampleNs(promptExtraccion({empresa,puesto,ubicacion,modalidad,idioma,descripcion}),
+                                {modelTier:'default', cache:false});
+    extra = parseaJSON(res.text||'');
+  }catch(e){
+    nuevaGuardando=false;
+    const c=e&&e.code;
+    nuevaMsg = c==='not_granted' ? 'No has dado permiso para generar con Claude.'
+             : c==='rate_limited' ? 'Demasiadas peticiones seguidas; espera un momento.'
+             : 'No se ha podido analizar la oferta; inténtalo de nuevo.';
+    pintaNueva(); return;
+  }
+  if(!extra){
+    nuevaGuardando=false;
+    nuevaMsg='Claude no ha devuelto una respuesta que se pueda leer; inténtalo de nuevo.';
+    pintaNueva(); return;
+  }
+
+  const familia = FAMILIA_ES[extra.familia] ? extra.familia : 'general';
+  const titular = limpiaTitular(String(extra.titular||puesto).slice(0,120)) || puesto;
+  const resumen = String(extra.resumen||'').slice(0,320);
+  const skillsExtra = filtraSkillsExtra(extra.skills_extra);
+  const reqsBrutos = Array.isArray(extra.reqs) ? extra.reqs
+    .filter(x=>Array.isArray(x) && x.length>=3 && x[0] && x[2])
+    .map(x=>[String(x[0]), Math.max(1,Math.min(10,Number(x[1])||5)), String(x[2]).slice(0,140)])
+    : [];
+  const reqs = reqsBrutos.length ? reqsBrutos : [['general', 5, puesto]];
+  const surfacedArr = (Array.isArray(extra.surfaced)?extra.surfaced:[])
+    .filter(k=>(EVIDENCIA[k]||0) > 0);
+  const aniosMin = Number.isFinite(extra.anios_min) ? extra.anios_min : null;
+  const alerta = String(extra.alerta||'').slice(0,240);
+
+  let salMin, salMax, salOrigen, salBase;
+  if(salMinUser!=null && salMaxUser!=null){
+    salMin=Math.min(salMinUser,salMaxUser); salMax=Math.max(salMinUser,salMaxUser); salOrigen='publicado';
+    salBase = 'Salario indicado a mano por Íñigo al añadir la oferta.';
+  } else {
+    const s = extra.salario || {};
+    const est = estimaSalario(familia, s.tipo_empresa, s.pais_contratacion, s.ajustes);
+    salMin=est.salMin; salMax=est.salMax; salOrigen='estimado'; salBase=est.salBase;
+  }
+  const salMedio = Math.round((salMin+salMax)/2);
+
+  const punt = puntuarOferta(reqs, surfacedArr);
+  const delta = Math.round((punt.scoreAdap-punt.scoreOrig)*10)/10;
+  const mejora = punt.scoreOrig ? Math.round(1000*(punt.scoreAdap-punt.scoreOrig)/punt.scoreOrig)/10 : 0;
+  const prioridad = Math.round(punt.scoreAdap*pesoFamilia(familia)*10)/10;
+  const fc = calculaFoco(puesto, publicada, salOrigen, prioridad);
+  const brecha = brechaAprendizaje(reqs);
+
+  const id = nuevoId(empresa, puesto);
+  const row = {
+    id, empresa, puesto, ubicacion, modalidad, publicada, idioma, fuente:'Manual',
+    salMin, salMax, salMedio, salOrigen, salBase,
+    url: url || '',
+    scoreOrig: punt.scoreOrig, scoreAdap: punt.scoreAdap, delta, mejora,
+    fuertes: punt.fuertes, huecos: punt.huecos, alerta,
+    titular, resumen, familia, skillsExtra,
+    reqs: reqs.slice().sort((a,b)=>b[1]-a[1]).slice(0,12).map(r=>`${r[2]} (peso ${r[1]})`),
+    zona: local ? 'local' : 'remoto',
+    ambito, prioridad, brecha,
+    foco: fc.foco, dias: fc.dias, motivoFoco: fc.motivoFoco, aniosMin,
+  };
+
+  DATA.push(row); MANUAL[id]=row; openId=id; vista='activa';
+  nuevaGuardando=false; nuevaAbierta=false;
+  pintaNueva(); render();
+  const tr=document.querySelector(`tr.r[data-id="${id}"]`);
+  if(tr) tr.scrollIntoView({block:'center'});
+  toast('Oferta añadida y CV adaptado.');
+
+  if(estadoIni!=='activa' || notas){
+    const patch = {estado: estadoIni};
+    if(estadoIni==='aplicada'){ patch.fase=fase; patch.fechaAplicacion=hoy(); }
+    if(notas) patch.notas=notas;
+    guardar(id, patch);
+  }
+  if(db){
+    try{
+      await db.doc('manual/'+id).set(row);
+      await db.doc('ofertas/'+id).set({
+        id, empresa, puesto, ubicacion, modalidad, publicada, idioma, fuente:'Manual',
+        sal_min: salMin, sal_max: salMax, sal_origen: salOrigen, sal_base: salBase,
+        url_apply: url || '', ambito, anios_min: aniosMin,
+        reqs, surfaced: surfacedArr,
+      });
+      await db.doc('tailor/'+id).set({ familia, titular, resumen, skills_extra: skillsExtra });
+    }catch(e){
+      toast('Guardada en esta vista, pero no se ha podido escribir en la base de datos compartida.');
+    }
+  } else {
+    toast('Guardada sólo en este navegador: no hay almacenamiento compartido.');
   }
 }
 
@@ -830,10 +1323,17 @@ function detailHTML(r){
         </div>
         ${novDetalle(r)}
         <div class="actions">
-          <a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Aplicar en ${esc(r.fuente)} →</a>
+          ${r.url?`<a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Aplicar en ${esc(r.fuente)} →</a>`:''}
           <button class="btn" data-cv="${r.id}">Generar CV adaptado (PDF)</button>
         </div>
         <p class="hint">El CV se arma en el momento con el titular, el resumen y el orden de logros calculados para esta oferta, en su idioma y en una sola página.</p>
+        <div class="actions" style="margin-top:14px">
+          ${BORRAR_CONFIRMAR[r.id]
+            ? `<span class="pt" style="font-size:12.5px;margin-right:2px">Se borra para siempre, sin deshacer.</span>
+               <button class="btn danger confirmar" data-oconf="${r.id}">Sí, borrar para siempre</button>
+               <button class="btn" data-ocancel="${r.id}">Cancelar</button>`
+            : `<button class="btn danger" data-odel="${r.id}" title="Quita la oferta de la base de datos; no se puede deshacer">Borrar definitivamente</button>`}
+        </div>
       </div>
       <div>
         <div class="tabs">
@@ -1152,6 +1652,15 @@ function burbujaHTML(r, m, i){
   if(m.rol==='tu'){
     return `<div class="burb tu"><span class="quien">Tu pregunta</span>${esc(m.texto)}</div>`;
   }
+  const clave = r.id+'|'+i;
+  if(EDITCHAT[clave] != null){
+    return `<div class="burb el editando"><span class="quien">Editando la respuesta</span>
+      <textarea data-ceditta="${clave}" style="min-height:90px">${esc(EDITCHAT[clave])}</textarea>
+      <div class="pie">
+        <button class="btn primary" data-ceditguarda="${clave}" style="padding:4px 10px;font-size:12px">Guardar</button>
+        <button class="btn" data-ceditcancela="${clave}" style="padding:4px 10px;font-size:12px">Cancelar</button>
+      </div></div>`;
+  }
   const L = lim(r.id), n = cuentaTexto(m.texto, L.unidad);
   const pasa = L.n && n > L.n;
   const enBanco = Object.values(BANCO).some(e=>e && e.texto===m.texto);
@@ -1160,26 +1669,44 @@ function burbujaHTML(r, m, i){
     <div class="pie">
       <span class="cuenta ${pasa?'pasa':''}">${n} ${L.unidad}${L.n?` de ${L.n}`:''}${pasa?' — se pasa':''}</span>
       <button class="btn" data-ccopy="${r.id}" data-i="${i}" style="padding:4px 10px;font-size:12px">Copiar</button>
+      <button class="btn" data-ceditinicia="${clave}" style="padding:4px 10px;font-size:12px">Editar</button>
       ${enBanco
         ? `<span class="pt" style="font-size:12px">Guardada en el banco</span>`
         : `<button class="btn" data-cbanco="${r.id}" data-i="${i}" style="padding:4px 10px;font-size:12px">Guardar en el banco</button>`}
     </div></div>`;
 }
 
+function bfilaHTML(s, e){
+  const edit = EDITBANCO[s];
+  if(edit){
+    return `<div class="bfila editando">
+      <label class="pt" style="font-size:11.5px" for="beditpreg-${esc(s)}">Pregunta</label>
+      <input type="text" id="beditpreg-${esc(s)}" data-beditpreg="${esc(s)}" value="${esc(edit.pregunta)}" style="width:100%;margin-bottom:6px">
+      <label class="pt" style="font-size:11.5px" for="bedittxt-${esc(s)}">Respuesta</label>
+      <textarea id="bedittxt-${esc(s)}" data-bedittxt="${esc(s)}" style="width:100%;min-height:90px">${esc(edit.texto)}</textarea>
+      <div class="bmeta">
+        <button class="btn primary" data-beditguarda="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Guardar</button>
+        <button class="btn" data-beditcancela="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Cancelar</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="bfila">
+    <p class="bq">${esc(e.pregunta)}</p>
+    <p class="bt">${esc(e.texto)}</p>
+    <div class="bmeta">${esc(e.empresa||'—')}${e.puesto?' · '+esc(e.puesto):''}${e.guardado?' · '+esc(String(e.guardado).slice(0,10)):''}${e.editado?' · editada':''}
+      <button class="btn" data-bcopy="${esc(s)}" style="padding:3px 9px;font-size:11.5px;margin-left:8px">Copiar</button>
+      <button class="btn" data-bedita="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Editar</button>
+      <button class="btn" data-bdel="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Borrar</button>
+    </div>
+  </div>`;
+}
 function bancoHTML(r){
   const filas = Object.entries(BANCO).filter(([,e])=>e && e.texto);
   if(!filas.length) return '';
   filas.sort((a,b)=>String(b[1].guardado||'').localeCompare(String(a[1].guardado||'')));
-  return `<details class="banco">
+  return `<details class="banco"${bancoAbierto?' open':''}>
     <summary>Banco de respuestas (${filas.length})</summary>
-    ${filas.map(([s,e])=>`<div class="bfila">
-      <p class="bq">${esc(e.pregunta)}</p>
-      <p class="bt">${esc(e.texto)}</p>
-      <div class="bmeta">${esc(e.empresa||'—')}${e.puesto?' · '+esc(e.puesto):''}${e.guardado?' · '+esc(String(e.guardado).slice(0,10)):''}
-        <button class="btn" data-bcopy="${esc(s)}" style="padding:3px 9px;font-size:11.5px;margin-left:8px">Copiar</button>
-        <button class="btn" data-bdel="${esc(s)}" style="padding:3px 9px;font-size:11.5px">Borrar</button>
-      </div>
-    </div>`).join('')}
+    ${filas.map(([s,e])=>bfilaHTML(s,e)).join('')}
   </details>`;
 }
 
@@ -1274,6 +1801,30 @@ async function guardaChat(id, ms){
   catch(e){ toast('Respondido, pero no se ha podido guardar; cópialo antes de recargar'); }
 }
 
+/* Editar a mano una respuesta ya generada del hilo -- por si Claude se acerca
+   pero no clava el tono, o hace falta corregir un dato después de escribirla.
+   No toca lo que ya hubiera guardado en el banco con el texto anterior: son
+   copias independientes, igual que un precedente "se adapta, no se reescribe". */
+function iniciaEditarChat(id, i){
+  const m = mensajes(id)[i]; if(!m || m.rol!=='el') return;
+  EDITCHAT[id+'|'+i] = m.texto; render();
+  const ta = document.querySelector(`[data-ceditta="${id}|${i}"]`);
+  if(ta){ ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
+}
+function cancelaEditarChat(clave){ delete EDITCHAT[clave]; render(); }
+async function guardaEditarChat(clave){
+  const [id, iTxt] = clave.split('|'); const i = +iTxt;
+  const ta = document.querySelector(`[data-ceditta="${clave}"]`);
+  const texto = ((ta && ta.value) || EDITCHAT[clave] || '').trim();
+  if(!texto){ toast('La respuesta no puede quedar vacía'); return; }
+  const ms = mensajes(id).slice();
+  if(!ms[i] || ms[i].rol!=='el') return;
+  ms[i] = Object.assign({}, ms[i], {texto, editado:new Date().toISOString()});
+  delete EDITCHAT[clave];
+  await guardaChat(id, ms);
+  toast('Respuesta editada');
+}
+
 async function guardarEnBanco(id, i){
   const r = DATA.find(x=>x.id===id); if(!r) return;
   const ms = mensajes(id), respuesta = ms[i];
@@ -1296,6 +1847,30 @@ async function borrarDelBanco(slug){
   if(!db) return;
   try{ await db.doc('respuestas/'+slug).delete(); toast('Borrada del banco'); }
   catch(e){ toast('No se ha podido borrar del banco'); }
+}
+
+/* Editar a mano una entrada ya guardada del banco: la pregunta, la respuesta,
+   o ambas. El slug (id del documento) no cambia aunque se retoque la
+   pregunta, para no perder qué precedente es cuál. */
+function iniciaEditarBanco(slug){
+  const e = BANCO[slug]; if(!e) return;
+  EDITBANCO[slug] = {pregunta:e.pregunta||'', texto:e.texto||''};
+  bancoAbierto=true; render();
+}
+function cancelaEditarBanco(slug){ delete EDITBANCO[slug]; bancoAbierto=true; render(); }
+async function guardaEditarBanco(slug){
+  const actual = BANCO[slug]; if(!actual) return;
+  const pta = document.querySelector(`[data-beditpreg="${slug}"]`);
+  const tta = document.querySelector(`[data-bedittxt="${slug}"]`);
+  const pregunta = ((pta && pta.value) || '').trim();
+  const texto = ((tta && tta.value) || '').trim();
+  if(!pregunta || !texto){ toast('La pregunta y la respuesta no pueden quedar vacías'); return; }
+  const entrada = Object.assign({}, actual, {pregunta, texto, editado:new Date().toISOString()});
+  BANCO = Object.assign({}, BANCO, {[slug]:entrada});
+  delete EDITBANCO[slug]; bancoAbierto=true; render();
+  if(!db){ toast('Editada sólo en esta pestaña: no hay base de datos'); return; }
+  try{ await db.doc('respuestas/'+slug).set(entrada); toast('Entrada del banco editada'); }
+  catch(e){ toast('No se ha podido guardar el cambio en el banco'); }
 }
 
 async function copiar(texto, mensajeOk){
@@ -1454,6 +2029,9 @@ function bind(){
   document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{
     guardar(b.dataset.restore,{estado:'activa'}); toast('Oferta recuperada');
   });
+  document.querySelectorAll('[data-odel]').forEach(b=>b.onclick=()=>marcarBorrado(b.dataset.odel));
+  document.querySelectorAll('[data-oconf]').forEach(b=>b.onclick=()=>borrarOferta(b.dataset.oconf));
+  document.querySelectorAll('[data-ocancel]').forEach(b=>b.onclick=()=>cancelaBorrado(b.dataset.ocancel));
   document.querySelectorAll('[data-apply]').forEach(b=>b.onclick=()=>{
     guardar(b.dataset.apply,{estado:'aplicada', fase:'aplicada', fechaAplicacion:hoy()});
     toast('Marcada como aplicada. La sigues en la pestaña «Aplicadas».');
@@ -1532,10 +2110,26 @@ function bind(){
     copiar(m&&m.texto, 'Respuesta copiada');
   });
   document.querySelectorAll('[data-cbanco]').forEach(b=>b.onclick=()=>guardarEnBanco(b.dataset.cbanco, +b.dataset.i));
+  document.querySelectorAll('[data-ceditinicia]').forEach(b=>b.onclick=()=>{
+    const [id,i]=b.dataset.ceditinicia.split('|'); iniciaEditarChat(id, +i);
+  });
+  document.querySelectorAll('[data-ceditcancela]').forEach(b=>b.onclick=()=>cancelaEditarChat(b.dataset.ceditcancela));
+  document.querySelectorAll('[data-ceditguarda]').forEach(b=>b.onclick=()=>guardaEditarChat(b.dataset.ceditguarda));
+  document.querySelectorAll('[data-ceditta]').forEach(ta=>{
+    ta.onkeydown=e=>{
+      if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); guardaEditarChat(ta.dataset.ceditta); }
+      if(e.key==='Escape'){ e.preventDefault(); cancelaEditarChat(ta.dataset.ceditta); }
+    };
+  });
   document.querySelectorAll('[data-bcopy]').forEach(b=>b.onclick=()=>{
     const e=BANCO[b.dataset.bcopy]; copiar(e&&e.texto);
   });
   document.querySelectorAll('[data-bdel]').forEach(b=>b.onclick=()=>borrarDelBanco(b.dataset.bdel));
+  document.querySelectorAll('[data-bedita]').forEach(b=>b.onclick=()=>iniciaEditarBanco(b.dataset.bedita));
+  document.querySelectorAll('[data-beditcancela]').forEach(b=>b.onclick=()=>cancelaEditarBanco(b.dataset.beditcancela));
+  document.querySelectorAll('[data-beditguarda]').forEach(b=>b.onclick=()=>guardaEditarBanco(b.dataset.beditguarda));
+  const detBanco = document.querySelector('details.banco');
+  if(detBanco) detBanco.ontoggle = ()=>{ bancoAbierto = detBanco.open; };
   document.querySelectorAll('[data-cborra]').forEach(b=>b.onclick=()=>{
     guardaChat(b.dataset.cborra, []);
     toast('Hilo vaciado. Lo que hubieras guardado en el banco sigue ahí.');
@@ -1779,6 +2373,15 @@ function cvBloques(r, FS){
 
   h2(L.skills);
   for(const s of skCfg.orden) bl.push({s:SK[s], size:FS, f:'TR', mb:2*PX});
+  /* Tecnologías propias de ESTA oferta que la variante de familia no saca por
+     defecto (p.ej. React en una oferta de AI agent engineer). Viene de
+     `tailor/<id>.skills_extra`, escrito a mano por oferta y sujeto al mismo
+     candado anti-invención que el resto del CV: sólo tecnologías que ya
+     tiene, nunca inventadas. Vacío para las ofertas que no lo necesiten. */
+  if(r.skillsExtra) bl.push({
+    s:(idi==='en' ? 'Also relevant for this role: ' : 'También relevante para esta oferta: ')+r.skillsExtra,
+    size:FS, f:'TR', mb:2*PX, just:true
+  });
 
   h2(L.lid);
   bl.push({s:L.lid_txt, size:FS, f:'TR', mb:3.5*PX, just:true});
@@ -1889,7 +2492,7 @@ function tablaExperiencia(){
         <td class="pt">${esc(FAMILIA_ES[r.familia]||r.familia)}</td>
         <td class="num">${eur(r.salMedio)}</td>
         <td style="white-space:nowrap"><button class="rebtn" data-ficha="${r.id}">Ficha</button>
-            <a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener" style="padding:4px 9px;font-size:12px">Ver</a></td>
+            ${r.url?`<a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener" style="padding:4px 9px;font-size:12px">Ver</a>`:''}</td>
       </tr>`).join('')}</tbody>
     </table>`;
 }
@@ -2096,7 +2699,7 @@ function tarjetaHoy(r){
     </div>
     <p class="por">${hueco ? 'Hueco principal: <b>'+esc(hueco)+'</b>.' : 'Cubres todos los requisitos que pide.'}${r.motivoFoco ? ' '+esc(r.motivoFoco.charAt(0).toUpperCase()+r.motivoFoco.slice(1))+'.' : ''}</p>
     <div class="acc">
-      <a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Abrir oferta</a>
+      ${r.url?`<a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Abrir oferta</a>`:''}
       <button class="btn" data-cv="${r.id}">CV</button>
       <button class="btn" data-ficha="${r.id}">Ficha</button>
       <button class="btn" data-apply="${r.id}">Aplicada</button>
@@ -2202,7 +2805,8 @@ fs.oninput=()=>{fsv.textContent=eur(+fs.value);render()};
 const fc=document.getElementById('fsc'), fcv=document.getElementById('fscv');
 fc.oninput=()=>{fcv.textContent=fc.value+' %';render()};
 document.getElementById('cfgbtn').onclick=abreCfg;
-document.addEventListener('keydown', e=>{ if(e.key==='Escape' && cfgAbierta) cierraCfg(); });
+document.getElementById('nuevabtn').onclick=abreNueva;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && cfgAbierta) cierraCfg(); if(e.key==='Escape' && nuevaAbierta) cierraNueva(); });
 document.getElementById('reset').onclick=()=>{
   document.getElementById('q').value=''; document.getElementById('fmod').value='';
   document.getElementById('flang').value=''; document.getElementById('famb').value=''; document.getElementById('ffam').value=''; document.getElementById('ffue').value=''; fs.value=35000; fsv.textContent=eur(35000);
@@ -2233,6 +2837,19 @@ out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL).replace("__CV
           .replace("__LINT__", LINT_JS)
           .replace("__EVIDENCIA__", json.dumps(_PERFIL_DOC.get("evidencia_orig") or {},
                                                ensure_ascii=False, separators=(',', ':')))
+          .replace("__TECHO__", json.dumps(_PERFIL_DOC.get("techo") or {},
+                                           ensure_ascii=False, separators=(',', ':')))
+          .replace("__PESO_FAMILIA__", json.dumps(PESO_FAMILIA, ensure_ascii=False, separators=(',', ':')))
+          .replace("__PESO_FAMILIA_DEFECTO__", json.dumps(PESO_FAMILIA_DEFECTO))
+          .replace("__DIFICULTAD__", json.dumps({k: list(v) for k, v in DIFICULTAD.items()},
+                                                ensure_ascii=False, separators=(',', ':')))
+          .replace("__DIFICULTAD_DEFECTO__", json.dumps(list(DIFICULTAD_DEFECTO), ensure_ascii=False))
+          .replace("__SENIOR_RE_FOCO__", json.dumps(_SENIOR_RE_FOCO.pattern, ensure_ascii=False))
+          .replace("__FRESCURA__", json.dumps(FRESCURA, ensure_ascii=False))
+          .replace("__PENALIZACION_SENIOR__", json.dumps(PENALIZACION_SENIOR))
+          .replace("__BONUS_SALARIO_PUBLICADO__", json.dumps(BONUS_SALARIO_PUBLICADO))
+          .replace("__VOCABULARIO_MD__", json.dumps(VOCABULARIO_MD, ensure_ascii=False))
+          .replace("__BANDAS__", BANDAS)
           .replace("__CONTACTO__", CONTACTO_JS).replace("__NOMBRE__", CONTACTO["nombre_es"])
           .replace("__N__", str(len(rows))).replace("__FECHA__", FECHA))
 open('out/dashboard.html','w').write(out)

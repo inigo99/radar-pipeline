@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-import os, re, sys, json
+import os, re, sys, json, unicodedata
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tailor import T
+from perfil import ORIG, termino_skill, TERMINOS_SKILL
+from base_cv import SKILLS_ES, SKILLS_EN, ORDEN_SKILLS
 
 RES = json.load(open('data/resultado.json'))
 
@@ -36,8 +38,55 @@ def _opcional(nombre, defecto):
 FILTRADAS = _opcional('filtradas.json', {})
 EMBUDO = _opcional('embudo.json', {})
 
+
+def _norm_txt(s):
+    """Minúsculas y sin acentos, para comparar contra el blob de skills_es/en
+    igual que hace `normTxt()` en JS (`filtraSkillsExtra`)."""
+    s = unicodedata.normalize('NFD', str(s or ''))
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    return s.lower()
+
+
+def _skills_extra_auto(reqs, familia, idioma):
+    """`skills_extra` determinista: si la oferta pesa una clave de vocabulario
+    que Íñigo tiene de verdad (`evidencia_orig > 0`, mismo candado que
+    `prominencia_adaptada`) y la variante de skills de su `familia` no la
+    enseña ya, se imprime como línea extra bajo «Competencias técnicas».
+
+    Hasta el 18 sep 2026 esto dependía de que la tarea diaria lo rellenara a
+    mano en `tailor/<id>.skills_extra` (paso 6 de TAREA_DIARIA.md) -- en la
+    práctica casi nunca lo hacía (0 de 327 ofertas lo llevaban relleno), así
+    que las palabras clave de la oferta no llegaban al CV aunque él tuviera
+    la tecnología. Ahora es determinista, igual que `_limpia_titular()` con
+    "Senior": no depende de que nadie se acuerde de un paso opcional.
+    `tailor/<id>.skills_extra`, si alguien lo rellena a mano (p.ej. el botón
+    "+ Oferta"), sigue teniendo prioridad -- ver la llamada más abajo."""
+    cfg = ORDEN_SKILLS.get(familia) or ORDEN_SKILLS.get('general') or {}
+    variante = cfg.get('variante')
+    tabla = SKILLS_EN if idioma == 'en' else SKILLS_ES
+    cats = (tabla.get(variante) or {})
+    orden_cats = cfg.get('orden') or list(cats.keys())
+    blob = _norm_txt(' | '.join(cats.get(c, '') for c in orden_cats))
+    vistos, salida = set(), []
+    for k, w, _l in sorted(reqs, key=lambda x: -x[1]):
+        if ORIG.get(k, 0.0) <= 0:
+            continue                                    # candado: no lo tiene -> no se inventa
+        termino = termino_skill(k, idioma)
+        if not termino or termino in vistos:
+            continue
+        if _norm_txt(termino) in blob:
+            continue                                    # ya sale en la variante de la familia
+        vistos.add(termino)
+        salida.append(termino)
+        if len(salida) >= 4:
+            break
+    return ', '.join(salida)
+
+
 rows=[]
 for r in RES:
+    _familia = T[r['id']]['familia']
+    _skills_manual = (T[r['id']].get('skills_extra') or '').strip()
     rows.append(dict(
       id=r['id'], empresa=r['empresa'], puesto=r['puesto'], ubicacion=r['ubicacion'],
       modalidad=r['modalidad'], publicada=r['publicada'], idioma=r['idioma'], fuente=r['fuente'],
@@ -45,8 +94,8 @@ for r in RES:
       salBase=r['sal_base'], url=r['url'], scoreOrig=r['score_orig'], scoreAdap=r['score_adap'],
       delta=r['delta'], mejora=r['mejora_pct'], fuertes=r['fuertes'], huecos=r['huecos'],
       alerta=r.get('alerta',''), titular=_limpia_titular(T[r['id']]['titular']),
-      resumen=T[r['id']]['resumen'], familia=T[r['id']]['familia'],
-      skillsExtra=T[r['id']].get('skills_extra') or '',
+      resumen=T[r['id']]['resumen'], familia=_familia,
+      skillsExtra=_skills_manual or _skills_extra_auto(r['reqs'], _familia, r['idioma']),
       reqs=[f"{l} (peso {w})" for _,w,l in sorted(r['reqs'], key=lambda x:-x[1])[:12]],
       zona=('local' if ('Navarra' in r['modalidad'] or 'Gipuzkoa' in r['modalidad']) else 'remoto'),
       ambito=r['ambito'],
@@ -63,8 +112,8 @@ FILTRADAS_JS = json.dumps(sorted(FILTRADAS.values(),
                           ensure_ascii=False, separators=(',', ':'))
 EMBUDO_JS = json.dumps(EMBUDO, ensure_ascii=False, separators=(',', ':'))
 
-from base_cv import (BULLETS_ES, BULLETS_EN, SKILLS_ES, SKILLS_EN, CONTACTO,
-                      ORDEN, ORDEN_SKILLS, CV_LABELS, PERFIL_LLM,
+from base_cv import (BULLETS_ES, BULLETS_EN, CONTACTO,
+                      ORDEN, CV_LABELS, PERFIL_LLM,
                       TFM_VARIANT, TFG_VARIANT)
 from datos import PERFIL as _PERFIL_DOC
 
@@ -108,7 +157,11 @@ PERFIL = json.dumps(_pl, ensure_ascii=False, separators=(',', ':'))
 CV = json.dumps(dict(contacto=CONTACTO, bullets_es=BULLETS_ES, bullets_en=BULLETS_EN,
                      skills_es=SKILLS_ES, skills_en=SKILLS_EN, orden=ORDEN,
                      orden_skills=ORDEN_SKILLS, labels=CV_LABELS,
-                     tfm_variant=TFM_VARIANT, tfg_variant=TFG_VARIANT),
+                     tfm_variant=TFM_VARIANT, tfg_variant=TFG_VARIANT,
+                     # Sólo para que `autoSkillsExtra()` (JS) pueda calcular
+                     # `skills_extra` igual que `_skills_extra_auto()` en
+                     # Python, cuando se añade una oferta a mano con "+ Oferta".
+                     terminos_skill=TERMINOS_SKILL),
                 ensure_ascii=False, separators=(',', ':'))
 
 TPL = r"""<title>Radar de ofertas</title>
@@ -1081,6 +1134,35 @@ function filtraSkillsExtra(txt){
   return terms.filter(t=>t && blob.includes(normTxt(t))).slice(0,4).join(', ');
 }
 
+/* Igual que `_skills_extra_auto()` en dashboard.py (Python), para cuando se
+   añade una oferta a mano con "+ Oferta": si Claude no ha rellenado
+   `skills_extra` (`filtraSkillsExtra(extra.skills_extra)` sale vacío), se
+   deriva solo de los `reqs` que la propia llamada ya extrajo -- misma
+   evidencia (`EVIDENCIA`), mismo candado (sólo claves con evidencia > 0),
+   mismo límite de 4 términos, y el mismo diccionario `CV.terminos_skill`
+   que usa el lado Python. Así el CV de una oferta manual no depende sólo de
+   que Claude acierte con `skills_extra` en la extracción. */
+function autoSkillsExtra(reqs, familia, idioma){
+  const cfg = CV.orden_skills[familia] || CV.orden_skills.general || {};
+  const tabla = idioma==='en' ? CV.skills_en : CV.skills_es;
+  const cats = (tabla && tabla[cfg.variante]) || {};
+  const ordenCats = cfg.orden || Object.keys(cats);
+  const blob = normTxt(ordenCats.map(c=>cats[c]||'').join(' | '));
+  const vistos = new Set(), salida = [];
+  const ordenados = (reqs||[]).slice().sort((a,b)=>b[1]-a[1]);
+  for(const req of ordenados){
+    const k = req[0], w = req[1];
+    if((EVIDENCIA[k]||0) <= 0) continue;
+    const par = CV.terminos_skill && CV.terminos_skill[k];
+    const termino = par ? (idioma==='en' ? par[1] : par[0]) : null;
+    if(!termino || vistos.has(termino)) continue;
+    if(blob.includes(normTxt(termino))) continue;
+    vistos.add(termino); salida.push(termino);
+    if(salida.length>=4) break;
+  }
+  return salida.join(', ');
+}
+
 function parseaJSON(texto){
   if(!texto) return null;
   let t = String(texto).trim();
@@ -1248,12 +1330,15 @@ async function guardaNueva(){
   const familia = FAMILIA_ES[extra.familia] ? extra.familia : 'general';
   const titular = limpiaTitular(String(extra.titular||puesto).slice(0,120)) || puesto;
   const resumen = String(extra.resumen||'').slice(0,320);
-  const skillsExtra = filtraSkillsExtra(extra.skills_extra);
   const reqsBrutos = Array.isArray(extra.reqs) ? extra.reqs
     .filter(x=>Array.isArray(x) && x.length>=3 && x[0] && x[2])
     .map(x=>[String(x[0]), Math.max(1,Math.min(10,Number(x[1])||5)), String(x[2]).slice(0,140)])
     : [];
   const reqs = reqsBrutos.length ? reqsBrutos : [['general', 5, puesto]];
+  // Si Claude no ha sacado skills_extra por su cuenta, se deriva sola de los
+  // reqs ya extraídos -- ver autoSkillsExtra(). Nunca se queda vacía sólo
+  // porque el modelo lo haya omitido.
+  const skillsExtra = filtraSkillsExtra(extra.skills_extra) || autoSkillsExtra(reqs, familia, idioma);
   const surfacedArr = (Array.isArray(extra.surfaced)?extra.surfaced:[])
     .filter(k=>(EVIDENCIA[k]||0) > 0);
   const aniosMin = Number.isFinite(extra.anios_min) ? extra.anios_min : null;

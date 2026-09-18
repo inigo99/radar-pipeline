@@ -26,6 +26,24 @@ def _limpia_titular(t):
     return t.strip()
 
 
+# Candado (18 sep 2026): el titular tiene que decir quién ES Íñigo, nunca
+# repetir el nombre del puesto del anuncio. Si `tailor/<id>.titular` llega
+# vacío (o queda vacío tras _limpia_titular), no hay `puesto` de reserva --
+# se usa un titular genérico razonable según la `familia`, igual que
+# `tituloPorDefecto()` en JS (mismo candado, mismo criterio, para el alta
+# manual con "+ Oferta").
+_TITULO_DEFECTO = {
+    'genai': 'Ingeniero de IA', 'ml': 'Ingeniero de Machine Learning',
+    'cv': 'Ingeniero de Visión por Computador', 'ds': 'Científico de Datos',
+    'mlops': 'Ingeniero MLOps', 'research': 'Ingeniero de IA',
+    'backend': 'Desarrollador Full Stack', 'general': 'Ingeniero Informático',
+}
+
+
+def _titulo_por_defecto(familia):
+    return _TITULO_DEFECTO.get(familia, 'Ingeniero Informático')
+
+
 def _opcional(nombre, defecto):
     """data/filtradas.json y data/embudo.json pueden no existir todavía."""
     try:
@@ -93,7 +111,8 @@ for r in RES:
       salMin=r['sal_min'], salMax=r['sal_max'], salMedio=r['sal_medio'], salOrigen=r['sal_origen'],
       salBase=r['sal_base'], url=r['url'], scoreOrig=r['score_orig'], scoreAdap=r['score_adap'],
       delta=r['delta'], mejora=r['mejora_pct'], fuertes=r['fuertes'], huecos=r['huecos'],
-      alerta=r.get('alerta',''), titular=_limpia_titular(T[r['id']]['titular']),
+      alerta=r.get('alerta',''),
+      titular=_limpia_titular(T[r['id']]['titular']) or _titulo_por_defecto(T[r['id']]['familia']),
       resumen=T[r['id']]['resumen'], familia=_familia,
       skillsExtra=_skills_manual or _skills_extra_auto(r['reqs'], _familia, r['idioma']),
       reqs=[f"{l} (peso {w})" for _,w,l in sorted(r['reqs'], key=lambda x:-x[1])[:12]],
@@ -1025,6 +1044,21 @@ function limpiaTitular(t){
   return t.trim();
 }
 
+/* Íñigo pidió (18 sep 2026) que el titular del CV nunca sea una copia (ni
+   ligeramente retocada) del nombre del puesto del anuncio: tiene que decir
+   quién ES él, no repetir cómo la empresa llama a la vacante. Si Claude no
+   ha devuelto nada usable, este es el candado en código: nunca cae de vuelta
+   en `puesto` (antes sí lo hacía, aquí mismo), sino en un titular genérico
+   razonable según la familia. */
+const TITULO_DEFECTO = {
+  genai:'Ingeniero de IA', ml:'Ingeniero de Machine Learning', cv:'Ingeniero de Visión por Computador',
+  ds:'Científico de Datos', mlops:'Ingeniero MLOps', research:'Ingeniero de IA',
+  backend:'Desarrollador Full Stack', general:'Ingeniero Informático'
+};
+function tituloPorDefecto(familia){
+  return TITULO_DEFECTO[familia] || 'Ingeniero Informático';
+}
+
 function pesoFamilia(familia){
   return PESO_FAMILIA[familia] != null ? PESO_FAMILIA[familia] : PESO_FAMILIA_DEFECTO;
 }
@@ -1201,7 +1235,7 @@ TAREA: devuelve SOLO un JSON válido (sin markdown, sin comentarios, sin texto a
 esta forma exacta:
 {
  "familia": "genai|ml|cv|ds|mlops|research|backend|general",
- "titular": "titular corto del CV adaptado a esta oferta; NUNCA 'Senior'/'Sénior'/'Sr.' aunque el puesto lo lleve",
+ "titular": "quién ES él, no el nombre del puesto del anuncio -- nunca copies ni adaptes ligeramente 'Puesto' de arriba (p.ej. si el puesto es 'Científico de datos', el titular NO puede ser 'Científico de Datos' ni nada que se le parezca). Es su identidad profesional para ESTA familia, en 2-4 palabras: 'Ingeniero de IA', 'Científico de Datos', 'Desarrollador Full Stack'... Si no se te ocurre algo mejor que encaje con la familia, usa 'Ingeniero Informático' (o 'Desarrollador Full Stack' si la familia es backend/general y encaja más). NUNCA 'Senior'/'Sénior'/'Sr.' aunque el puesto lo lleve",
  "resumen": "2-3 frases, máximo 240 caracteres, en el idioma de la oferta: quién es, el logro que conecta con esta oferta y opcionalmente las tecnologías clave",
  "skills_extra": "0 a 4 términos que SÍ tiene y la variante de su familia no saca, separados por coma, o cadena vacía",
  "reqs": [["clave_de_vocabulario", peso_1_a_10, "etiqueta con las palabras del anuncio"], "..."],
@@ -1328,7 +1362,9 @@ async function guardaNueva(){
   }
 
   const familia = FAMILIA_ES[extra.familia] ? extra.familia : 'general';
-  const titular = limpiaTitular(String(extra.titular||puesto).slice(0,120)) || puesto;
+  // Nunca cae de vuelta en `puesto` (el nombre del puesto del anuncio): un
+  // titular no puede ser una copia de cómo la empresa llama a la vacante.
+  const titular = limpiaTitular(String(extra.titular||'').slice(0,120)) || tituloPorDefecto(familia);
   const resumen = String(extra.resumen||'').slice(0,320);
   const reqsBrutos = Array.isArray(extra.reqs) ? extra.reqs
     .filter(x=>Array.isArray(x) && x.length>=3 && x[0] && x[2])

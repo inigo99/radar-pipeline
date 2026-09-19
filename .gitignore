@@ -4,3 +4,8 @@ out/
 cv/
 __pycache__/
 *.pyc
+
+# Dependencias de Node (jsdom para tests/paridad.mjs, terser para
+# tools/build_bundle.js): se instalan con `npm install`, no se versionan.
+node_modules/
+package-lock.json

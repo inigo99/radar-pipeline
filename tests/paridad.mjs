@@ -92,5 +92,21 @@ for (const r of dataPagina) {
   igual(fc.foco, r.foco, `${r.id} foco de DATA recalculado`);
 }
 
+console.log('paridad: cvBloques() no revienta y orden[familia] tiene la forma que espera');
+for (const r of resultado.slice(0, 3)) {
+  try {
+    const bloques = ev(`cvBloques(${JSON.stringify(r)}, 9.7)`);
+    const oo = ev(`CV.orden['${r.familia}'] ? CV.orden['${r.familia}'][0] : CV.orden.backend[0]`);
+    const vv = ev(`CV.orden['${r.familia}'] ? CV.orden['${r.familia}'][1] : CV.orden.backend[1]`);
+    igual(true, Array.isArray(bloques) && bloques.length > 0, `${r.id} cvBloques() devuelve bloques`);
+    igual(true, Array.isArray(oo) && Array.isArray(vv),
+          `${r.id} CV.orden[familia] son dos listas de claves (bug del 19-sep-2026: `
+          + `si alguna vuelve a ser una clave suelta en vez de una lista, oo.map()/vv.map() `
+          + `revientan al generar el CV real)`);
+  } catch (e) {
+    igual('sin excepción', `excepción: ${e.message}`, `${r.id} cvBloques()`);
+  }
+}
+
 console.log(fallos ? `\n${fallos} divergencia(s)` : '\nsin divergencias');
 process.exit(fallos ? 1 : 0);

@@ -26,6 +26,19 @@ Dos reglas son propias de este sistema y no salen en ningún manual de CV:
 `evidencia-sin-demostrar` y `techo-imposible` comprueban que el modelo de
 evidencia —el que sostiene el candado anti-invención de `perfil.py`— siga
 diciendo la verdad sobre los bullets que realmente hay.
+
+**Bug corregido el 19-sep-2026, serio.** `ctx["bullets"]` mapea cada clave a
+una LISTA de líneas de logro (un puesto puede tener varios bullets debajo),
+pero `pocas-metricas`, `lenguaje-de-funciones`, `bullet-largo`,
+`frases-vacia`, `tiempos-mezclados`, `primera-persona`, `keyword-repetido` y
+`evidencia-sin-demostrar` trataban cada valor como si fuera una sola línea de
+texto (`re.search(patron, lista)`, `len(lista)`...). Eso revienta con
+`TypeError` en cuanto un puesto tiene más de un bullet -- es decir, siempre --
+y `analiza()` lo capturaba en silencio como un hallazgo `regla-rota` de nivel
+`info` que nadie miraba. En la práctica, ocho de las dieciocho reglas de este
+fichero no habían llegado a ejecutarse nunca de verdad. Se corrigió aplanando
+los grupos con `_lineas_bullets()` antes de mirarlos línea a línea; ver
+`tests/test_lint.py`, que antes no existía.
 """
 import json
 import os
@@ -107,25 +120,58 @@ def tramos(texto):
 
 
 def _bullets_por_puesto(perfil):
-    """[(nombre del puesto, [textos de sus logros])] uniendo todas las familias.
+    """[(nombre del puesto o bloque, {claves, por_familia}, textos)] uniendo
+    todas las familias. Un bullet puede salir en unas familias y no en otras;
+    para el linter interesa el conjunto, que es lo que puede acabar en un CV.
 
-    Un bullet puede salir en unas familias y no en otras; para el linter
-    interesa el conjunto, que es lo que puede acabar en un CV.
+    `orden[familia]` son DOS listas de claves (ver `cvBloques()` en
+    `dashboard.py`: `oo=CV.orden[fam][0]`, `vv=CV.orden[fam][1]`) -- la
+    sección de experiencia y una sección secundaria (proyecto personal,
+    normalmente) -- **no** una lista con un elemento por puesto. Por eso el
+    nombre de cada bloque se busca por pertenencia real en
+    `experiencia[].bullets`, no por la posición dentro de `orden` (corregido
+    el 19-sep-2026: antes, la segunda posición se etiquetaba siempre como "el
+    segundo puesto de la experiencia" -- `_nombre_puesto(exp, 1)` -- aunque en
+    la práctica ahí suele ir un proyecto personal o un TFM/TFG, no un puesto;
+    y si una sección agrupaba bullets de dos puestos a la vez, los dos
+    quedaban mal etiquetados con el nombre de uno solo).
     """
     orden = perfil.get("orden") or {}
     textos = perfil.get("bullets_es") or {}
     exp = (perfil.get("perfil_llm") or {}).get("experiencia") or []
     puestos = {}
-    for familia, listas in orden.items():
-        for i, claves in enumerate(listas or []):
-            nombre = _nombre_puesto(exp, i)
-            puestos.setdefault(nombre, {"claves": set(), "por_familia": {}})
-            puestos[nombre]["claves"].update(claves or [])
-            puestos[nombre]["por_familia"][familia] = list(claves or [])
+    for familia, secciones in orden.items():
+        for claves in secciones or []:
+            for clave in claves or []:
+                nombre = _nombre_bloque(exp, clave)
+                puestos.setdefault(nombre, {"claves": set(), "por_familia": {}})
+                puestos[nombre]["claves"].add(clave)
+                puestos[nombre]["por_familia"].setdefault(familia, []).append(clave)
     return [(nombre, d, textos) for nombre, d in puestos.items()]
 
 
+def _nombre_bloque(exp, clave):
+    """Puesto real al que pertenece una clave de bullets, buscando por
+    pertenencia en `experiencia[].bullets` -- nunca por posición (ver el
+    porqué en `_bullets_por_puesto`). Si la clave no pertenece a ningún
+    puesto (TFM, TFG, proyecto personal...), se etiqueta con la propia clave
+    en vez de inventarse un puesto que no es."""
+    for e in exp:
+        if clave in (e.get("bullets") or []):
+            for campo in ("empresa", "compania", "compañia", "organizacion"):
+                if e.get(campo):
+                    return str(e[campo])
+            for campo in ("puesto", "cargo", "titulo", "rol"):
+                if e.get(campo):
+                    return str(e[campo])
+    return f"bloque «{clave}» (fuera de la experiencia laboral)"
+
+
 def _nombre_puesto(exp, i):
+    """Nombre del puesto i-ésimo de `perfil_llm.experiencia`, en orden
+    cronológico -- distinto de `_nombre_bloque()`: aquí el índice SÍ es
+    posicional de verdad, porque `ctx["experiencia"]` es la lista de puestos
+    tal cual, no una agrupación de `orden` con dos secciones por delante."""
     if i < len(exp):
         e = exp[i]
         for clave in ("empresa", "compania", "compañia", "organizacion"):
@@ -135,6 +181,17 @@ def _nombre_puesto(exp, i):
             if e.get(clave):
                 return str(e[clave])
     return f"puesto {i + 1}"
+
+
+def _lineas_bullets(bullets):
+    """[(clave, línea)] aplanando los grupos de `ctx["bullets"]` (cada clave
+    puede tener varias líneas de logro debajo). Sacado a helper el 19-sep-2026
+    porque media docena de reglas trataban cada grupo como si fuera una sola
+    línea de texto -- `re.search(patron, grupo)` con `grupo` siendo una
+    lista revienta con TypeError, y `analiza()` lo capturaba en silencio como
+    "regla-rota": estas reglas llevaban sin funcionar desde que existen.
+    """
+    return [(clave, linea) for clave, grupo in bullets.items() for linea in (grupo or [])]
 
 
 def _todos_los_bullets(perfil):
@@ -231,24 +288,24 @@ def regla_hay_logros(perfil, ctx):
 
 
 def regla_metricas(perfil, ctx):
-    bullets = ctx["bullets"]
-    if not bullets:
+    lineas = _lineas_bullets(ctx["bullets"])
+    if not lineas:
         return
-    con = [t for t in bullets.values() if _CIFRA.search(t)]
-    ratio = len(con) / float(len(bullets))
+    con = [1 for _, t in lineas if _CIFRA.search(t)]
+    ratio = len(con) / float(len(lineas))
     if ratio < MIN_CON_METRICA:
-        sin = [k for k, t in bullets.items() if not _CIFRA.search(t)]
+        sin = sorted({k for k, t in lineas if not _CIFRA.search(t)})
         yield hallazgo(
             "pocas-metricas", "aviso",
-            f"Sólo {len(con)} de {len(bullets)} logros llevan una cifra "
+            f"Sólo {len(con)} de {len(lineas)} logros llevan una cifra "
             f"({ratio:.0%}).",
             detalle="La fórmula es «conseguí X, medido por Y, haciendo Z». "
                     "Sin la Y, el logro es una descripción de tarea. "
-                    "Sin cifra: " + ", ".join(sorted(sin)[:8]))
+                    "Sin cifra en: " + ", ".join(sin[:8]))
 
 
 def regla_lenguaje_funciones(perfil, ctx):
-    for clave, texto in sorted(ctx["bullets"].items()):
+    for clave, texto in sorted(_lineas_bullets(ctx["bullets"])):
         for patron, etiqueta in FUNCIONES:
             if re.search(patron, texto, re.I):
                 yield hallazgo(
@@ -259,7 +316,7 @@ def regla_lenguaje_funciones(perfil, ctx):
 
 
 def regla_bullet_largo(perfil, ctx):
-    for clave, texto in sorted(ctx["bullets"].items()):
+    for clave, texto in sorted(_lineas_bullets(ctx["bullets"])):
         if len(texto) > MAX_BULLET:
             yield hallazgo("bullet-largo", "aviso",
                            f"Un logro de {len(texto)} caracteres; nadie lo lee entero.",
@@ -268,19 +325,20 @@ def regla_bullet_largo(perfil, ctx):
 
 def regla_demasiados_bullets(perfil, ctx):
     vistos = set()
-    for nombre, d, _ in ctx["puestos"]:
+    for nombre, d, textos in ctx["puestos"]:
         for familia, claves in sorted(d["por_familia"].items()):
-            if len(claves) > MAX_BULLETS_PUESTO and (nombre, len(claves)) not in vistos:
-                vistos.add((nombre, len(claves)))
+            n = sum(len(textos.get(k) or []) for k in claves)
+            if n > MAX_BULLETS_PUESTO and (nombre, n) not in vistos:
+                vistos.add((nombre, n))
                 yield hallazgo(
                     "demasiados-bullets", "info",
-                    f"{len(claves)} logros en un mismo puesto "
+                    f"{n} logros en un mismo puesto "
                     f"(familia «{familia}»); a partir de {MAX_BULLETS_PUESTO} se saltan.",
                     donde=nombre)
 
 
 def regla_frases_vacias(perfil, ctx):
-    for clave, texto in sorted(ctx["bullets"].items()):
+    for clave, texto in sorted(_lineas_bullets(ctx["bullets"])):
         for patron in VACIAS:
             if re.search(patron, texto, re.I):
                 yield hallazgo("frase-vacia", "aviso",
@@ -291,7 +349,7 @@ def regla_frases_vacias(perfil, ctx):
 
 def regla_tiempos(perfil, ctx):
     for nombre, d, textos in ctx["puestos"]:
-        aperturas = [textos[k] for k in d["claves"] if k in textos]
+        aperturas = [linea for k in d["claves"] for linea in (textos.get(k) or [])]
         ger = [t for t in aperturas if _GERUNDIO.match(t)]
         pas = [t for t in aperturas if _PASADO.match(t) and not _GERUNDIO.match(t)]
         if ger and pas:
@@ -302,7 +360,7 @@ def regla_tiempos(perfil, ctx):
 
 
 def regla_primera_persona(perfil, ctx):
-    for clave, texto in sorted(ctx["bullets"].items()):
+    for clave, texto in sorted(_lineas_bullets(ctx["bullets"])):
         if _PRIMERA_PERSONA.match(texto):
             yield hallazgo("primera-persona", "info",
                            "Un logro que empieza en primera persona.",
@@ -320,19 +378,19 @@ def regla_exceso_skills(perfil, ctx):
 
 
 def regla_keyword_repetido(perfil, ctx):
-    bullets = list(ctx["bullets"].values())
-    if len(bullets) < 4:
+    lineas = [t for _, t in _lineas_bullets(ctx["bullets"])]
+    if len(lineas) < 4:
         return
-    limite = max(3, int(len(bullets) * 0.6))
+    limite = max(3, int(len(lineas) * 0.6))
     for termino in sorted(ctx["evidencia"]):
         if len(termino) < 3:
             continue
         patron = re.compile(r"\b" + re.escape(termino) + r"\b", re.I)
-        veces = sum(1 for t in bullets if patron.search(t))
+        veces = sum(1 for t in lineas if patron.search(t))
         if veces > limite:
             yield hallazgo(
                 "keyword-repetido", "info",
-                f"«{termino}» aparece en {veces} de {len(bullets)} logros.",
+                f"«{termino}» aparece en {veces} de {len(lineas)} logros.",
                 detalle="Repetir un término no mejora el filtrado de ningún ATS "
                         "moderno, y al lector le suena a relleno.")
 
@@ -345,7 +403,8 @@ def regla_evidencia_sin_demostrar(perfil, ctx):
     está argumentado. Si el bullet que lo argumentaba se reescribió y el término
     desapareció, la puntuación sigue contándolo y nadie se entera.
     """
-    texto = " \n".join(ctx["bullets"].values()) + " \n" + " ".join(ctx["skills"])
+    texto = (" \n".join(t for _, t in _lineas_bullets(ctx["bullets"]))
+              + " \n" + " ".join(ctx["skills"]))
     # Las claves del vocabulario van en minúscula y con guiones bajos
     # («github_actions»); el CV escribe «GitHub Actions». Se comparan las dos
     # formas aplanadas para no inventar hallazgos por la separación.

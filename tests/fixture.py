@@ -86,24 +86,43 @@ PERFIL = dict(
                   linkedin="linkedin.com/in/ejemplo",
                   ciudad_es="Ciudad", ciudad_en="City",
                   ubicacion="Ciudad, País"),
+    # "apis_rest" y "computer_vision" llevan evidencia 1,0 (demostrado) más
+    # abajo: tienen que aparecer también aquí en texto, o "evidencia-sin-
+    # demostrar" los marca -- y ahora sí se ejecuta de verdad (bug del
+    # 19-sep-2026 en pipeline/lint.py, ver su cabecera).
     bullets_es={
         "empleo1": ["Reduje un 38 % el tiempo de carga del catálogo, de 4,1 s a 2,5 s.",
-                    "Migré 12 servicios a contenedores sin caída de servicio."],
+                    "Migré 12 servicios a contenedores sin caída de servicio.",
+                    "Diseñé las APIs REST que consume el frontend del catálogo."],
         "empleo2": ["Entrené un clasificador con 0,91 de F1 sobre 40 000 documentos."],
         "M1a": ["TFM: detección de anomalías con redes convolucionales, 0,94 de AUC."],
-        "G1a": ["TFG: segmentación de imagen médica con U-Net."],
+        "G1a": ["TFG: Computer Vision aplicado a segmentación de imagen médica con U-Net."],
         "v1": ["Proyecto propio: asistente RAG sobre 2 000 documentos internos."],
     },
     bullets_en={
         "empleo1": ["Cut catalogue load time by 38 %, from 4.1 s to 2.5 s.",
-                    "Migrated 12 services to containers with no downtime."],
+                    "Migrated 12 services to containers with no downtime.",
+                    "Designed the REST APIs the catalogue frontend consumes."],
         "empleo2": ["Trained a classifier scoring 0.91 F1 over 40,000 documents."],
         "M1a": ["MSc thesis: anomaly detection with CNNs, 0.94 AUC."],
-        "G1a": ["BSc thesis: medical image segmentation with U-Net."],
+        "G1a": ["BSc thesis: computer vision for medical image segmentation with U-Net."],
         "v1": ["Side project: RAG assistant over 2,000 internal documents."],
     },
     skills_es=SKILLS, skills_en=SKILLS,
-    orden={f: ["empleo1", "v1"] for f in ("genai", "ml", "cv", "ds", "backend", "general")},
+    # `orden[familia]` son DOS listas de claves de bullets_es/en (no una lista
+    # plana de claves, y no una lista por puesto): la sección "Experiencia"
+    # (aquí, los bullets de los dos empleos) y una sección secundaria (aquí,
+    # el proyecto personal) -- ver `cvBloques()` en dashboard.py
+    # (`oo=CV.orden[fam][0]`, `vv=CV.orden[fam][1]`, cada uno mapeado con
+    # `.map(k=>B[k])`). Antes de corregirlo (19-sep-2026) esta fixture llevaba
+    # una lista plana de un solo nivel (`["empleo1", "v1"]`): con esa forma,
+    # `_todos_los_bullets()` de `pipeline/lint.py` explotaba cada clave
+    # carácter a carácter y de los cinco bloques de bullets sólo sobrevivían
+    # "M1a"/"G1a" (por `tfm_variant`/`tfg_variant`, que van aparte) --
+    # "empleo1", "empleo2" y "v1" quedaban fuera del contexto del linter sin
+    # que ningún test lo notara.
+    orden={f: [["empleo1", "empleo2"], ["v1"]]
+           for f in ("genai", "ml", "cv", "ds", "backend", "general")},
     orden_skills={f: dict(variante="base", orden=["Lenguajes", "IA / Datos", "Infraestructura"])
                   for f in ("genai", "ml", "cv", "ds", "backend", "general")},
     cv_labels={"es": {}, "en": {}},

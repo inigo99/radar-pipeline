@@ -65,6 +65,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dedupe import sin_acentos  # reutiliza la misma normalización que dedupe.py
+from estadisticas import acumula  # instrumentación de coste, ver pipeline/estadisticas.py
 
 _RE_K = re.compile(r'(\d{1,3})\s*[kK]\b')
 _RE_MIL = re.compile(r'(\d{1,3}(?:[.,]\d{3})+)')
@@ -177,6 +178,8 @@ def main(argv):
     if destino:
         with open(destino, "w", encoding="utf-8") as fh:
             json.dump(supervivientes, fh, ensure_ascii=False, indent=1)
+
+    acumula(candidatas_recibidas=len(candidatas), filtradas_config=len(filtradas))
 
     print(f"{len(candidatas)} candidatas · {len(supervivientes)} pasan · "
           f"{len(filtradas)} filtradas"

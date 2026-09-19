@@ -44,14 +44,18 @@ Uso:
     python pipeline/dedupe.py --auditar                # duplicados ya dentro de `ofertas`
 
 `candidatas.json` es una lista de ofertas nuevas (basta con `id`, `empresa` y
-`puesto`). Lo conocido sale de `data/`: `ofertas.json`, `cerradas.json` y
-`estado.json`.
+`puesto`). Lo conocido sale de `data/`: `ofertas.json`, `cerradas.json`,
+`estado.json` y lo podado por antigüedad de `filtradas.json` (ver
+`conocidas_de_data()`).
 """
 import json
 import os
 import re
 import sys
 import unicodedata
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from estadisticas import acumula  # noqa: E402  (instrumentación de coste, ver pipeline/estadisticas.py)
 
 DATA = os.environ.get("RADAR_DATA", "data")
 
@@ -258,12 +262,37 @@ def _leer(nombre, defecto):
 
 
 def conocidas_de_data():
-    """Lo que ya está en el radar: ofertas vivas, cerradas y con seguimiento."""
+    """Lo que ya está en el radar: ofertas vivas, cerradas, podadas y con seguimiento.
+
+    Bug corregido el 19-sep-2026: `poda_antiguedad.py` retira lo publicado hace
+    más de 45 días sin seguimiento y lo anota en `filtradas` con
+    `motivo: "podada"` (no en `cerradas`: nunca lo hizo, a pesar de que el
+    procedimiento decía lo contrario). Como este `conocidas_de_data()` sólo
+    miraba `cerradas`+`estado`, una vacante podada que se reeditara con un id
+    nuevo (repost, frecuente en portales e intermediarias) no quedaba vetada
+    por nada: volvía a entrar como "nueva", se puntuaba y se metía otra vez en
+    el dashboard -- justo lo que la poda quería evitar.
+
+    Sólo se veta por `motivo == "podada"`. El resto de motivos de `filtradas`
+    (empresa excluida, palabra excluida, salario bajo, duplicada...) NO se
+    vetan aquí a propósito: dependen de `config/filtros`, que Íñigo puede
+    cambiar, y una vacante fresca bajo una configuración nueva sí debe poder
+    entrar. La antigüedad no cambia: una oferta de hace 45+ días sigue teniendo
+    45+ días pase lo que pase en la configuración.
+    """
     ofertas = _leer("ofertas.json", [])
     cerradas = _leer("cerradas.json", {"lista": []}).get("lista", [])
+    filtradas = _leer("filtradas.json", {})
+    podadas = [f for f in filtradas.values()
+               if isinstance(f, dict) and f.get("motivo") == "podada" and f.get("empresa")]
     estado = _leer("estado.json", {})
-    vetados = {c.get("id") for c in cerradas if c.get("id")} | set(estado)
-    return list(ofertas) + [c for c in cerradas if c.get("empresa")], vetados
+    vetados = ({c.get("id") for c in cerradas if c.get("id")}
+               | {p.get("id") for p in podadas if p.get("id")}
+               | set(estado))
+    conocidas = (list(ofertas)
+                 + [c for c in cerradas if c.get("empresa")]
+                 + podadas)
+    return conocidas, vetados
 
 
 def _auditar():
@@ -326,6 +355,9 @@ def main(argv):
 
     conocidas, vetados = conocidas_de_data()
     supervivientes, duplicadas = dedupe(candidatas, conocidas, vetados)
+
+    acumula(candidatas_a_dedupe=len(candidatas), duplicadas=len(duplicadas),
+            ofertas_nuevas=len(supervivientes))
 
     destino = None
     if "--json" in argv:

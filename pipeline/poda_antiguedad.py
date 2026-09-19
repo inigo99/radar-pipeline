@@ -18,6 +18,9 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from estadisticas import acumula  # noqa: E402  (instrumentación de coste, ver pipeline/estadisticas.py)
+
 DATA = os.environ.get("RADAR_DATA", "data")
 HOY = datetime.date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else datetime.date.today()
 CORTE = HOY - datetime.timedelta(days=45)
@@ -79,6 +82,8 @@ def main():
         }
     with open(os.path.join(DATA, "filtradas.json"), "w", encoding="utf-8") as fh:
         json.dump(filtradas, fh, ensure_ascii=False)
+
+    acumula(ofertas_antes_de_podar=len(ofertas), podadas=len(retirar))
 
 
 if __name__ == "__main__":

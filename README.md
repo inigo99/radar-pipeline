@@ -61,6 +61,20 @@ reescribe `data/ofertas.json` entero.
 `embudo.py` **no es opcional**: si no se ejecuta, `data/embudo.json` no existe y la
 pestaña «Embudo» del dashboard sale vacía aunque haya candidaturas registradas.
 
+`dashboard.py` es sólo el ensamblaje: lee `pipeline/dashboard_template.html`
+(el armazón HTML/CSS) y `pipeline/dashboard.js` (todo el JavaScript del lado
+del cliente — puntuación, foco, CV, PDF, validadores...), sustituye el hueco
+`__SCRIPT__` y rellena el resto de `__PLACEHOLDER__` con los datos del día.
+Hasta el 19-sep-2026 ese JavaScript — casi 2500 líneas — vivía como una única
+cadena Python de 174 KB dentro de `dashboard.py` (entonces 3092 líneas): el
+fichero que más de una vez ha llegado corrompido en silencio al escribirlo en
+el ordenador de Íñigo con `device_commit_files` (por eso conviene comprobar
+el hash tras cada subida de un fichero grande, no sólo con éste). Cuanto más
+grande y más ajeno a cualquier herramienta es un fichero, menos se nota cuando
+algo lo daña. Con el JS aparte, `node --check pipeline/dashboard.js` lo
+comprueba solo, sin generar la página, y editarlo no toca ni una línea de
+Python.
+
 `datos.py` es el único punto de carga; `ofertas.py`, `tailor.py`, `base_cv.py` y
 `perfil.py` son envoltorios finos sobre él.
 
@@ -76,7 +90,9 @@ vez de un texto que sólo existe dentro del trigger.
 
 ```bash
 python tests/smoke.py          # el pipeline entero sobre una fixture sintética
-npm install jsdom --no-save    # opcional: habilita el test de paridad
+python tests/test_dedupe.py    # deduplicación: hashes truncados, huella, poda vetada
+python tests/test_lint.py      # las 18 reglas del linter del CV
+npm install                    # jsdom (test de paridad) y terser (build del bundle)
 ```
 
 El repo no tiene datos, así que hasta ahora no había forma de probarlo sin la
@@ -84,8 +100,11 @@ base de datos del artifact delante. `tests/fixture.py` reproduce el **esquema**
 —cuatro ofertas elegidas para tocar los caminos que se han roto alguna vez, un
 perfil mínimo pero completo— y `tests/smoke.py` ejecuta encima el pipeline
 completo, el round-trip del snapshot, la poda, el filtrado, `node --check`
-sobre el `<script>` de la página y una comprobación de que el `bundle.min.js`
-no se ha quedado por detrás de sus fuentes.
+sobre el `<script>` de la página y que el `bundle.min.js` sea exactamente lo
+que produce `node tools/build_bundle.js` sobre las fuentes actuales (no sólo
+que no falte ninguna función por nombre, que es lo que había hasta el
+19-sep-2026 y no detectaba un bundle desactualizado si cambiaba el cuerpo de
+una función sin cambiar su nombre).
 
 `tests/paridad.mjs` es el que se gana el sitio: la misma aritmética vive dos
 veces —en Python, que es lo que corre la tarea, y portada a JavaScript dentro
@@ -93,7 +112,16 @@ de `dashboard.py`, para el botón «+ Oferta» y el orden de la página— y las
 constantes se inyectan pero la lógica está escrita dos veces. El test carga la
 página con jsdom y llama a sus funciones con los mismos datos con los que corrió
 el pipeline. En su primera ejecución encontró que `diasDesde()` daba un día de
-más a partir del mediodía, que es media ventana de frescura de diferencia.
+más a partir del mediodía, que es media ventana de frescura de diferencia; el
+19-sep-2026 se le añadió una comprobación de `cvBloques()` (el generador real
+del CV en PDF) después de encontrar que `orden[familia]` llevaba tiempo con una
+forma que no era la que `dashboard.py` espera -- ver `pipeline/lint.py`.
+
+`dedupe.py` y `lint.py` no tenían ningún test hasta el 19-sep-2026, a pesar de
+ser dos de las piezas con más historial de bugs reales del repo (dedupe: hash
+de InfoJobs truncado, "Banco Santander" vs "Grupo Santander"; lint: ocho de
+sus dieciocho reglas llevaban rompiéndose en silencio -- ver la cabecera de
+`pipeline/lint.py`).
 
 Todo esto corre en cada push (`.github/workflows/ci.yml`). Importa porque la
 tarea diaria clona `master` a ciegas: lo que esté roto en master se descubre de
@@ -128,13 +156,19 @@ ya resuelto, para no volver a derivarlo —ni a romperlo— cada mañana:
 | `vocabulario.js` | diccionario término → regex para redactar los `reqs`, sin leer la ficha entera |
 | `bundle.min.js` | los tres primeros (común + LinkedIn + InfoJobs), concatenados y minificados |
 
+`bundle.min.js` se genera con `node tools/build_bundle.js` (necesita
+`npm install`, que instala `terser`). **No se edita a mano ni se regenera con
+otro comando**: `tests/smoke.py` reconstruye el bundle con este mismo script y
+compara bytes contra el commiteado, así que un bundle generado de otra forma
+(u olvidado de regenerar tras tocar una fuente) hace fallar el test.
+
 **Manfred no necesita subagente.** Como usa una API JSON en vez de HTML, no
 tiene el coste que justifica pegar código en una pestaña sólo por LinkedIn e
 InfoJobs — pero sí necesita el navegador (el proxy de salida de la nube
 bloquea `getmanfred.com` igual que bloquea el resto), así que va en el hilo
-principal, junto a JSearch, nunca en el subagente de Tecnoempleo/Indeed:
-ese subagente no tiene navegador y Manfred se queda sin cubrir si se le
-delega ahí (pasó el 16-sep-2026).
+principal, nunca en el subagente de Tecnoempleo/Indeed: ese subagente no
+tiene navegador y Manfred se queda sin cubrir si se le delega ahí (pasó el
+16-sep-2026).
 
 ### Cómo se cargan (y por qué no hay caché)
 

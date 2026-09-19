@@ -6,7 +6,12 @@ Sin seguimiento = no hay documento en `estado` para ese id, o lo hay con
 estado == 'activa'. Cualquier otra fase (aplicada, rechazada, descartada,
 con notas) nunca se toca.
 
-Imprime solo el recuento y la lista de ids retirados.
+Lo retirado se anota en `data/filtradas.json` con `motivo: "podada"`, que es
+lo que lee el dashboard (pestana <<Filtradas>>) y lo que sube el snapshot: asi
+la poda se ve y se puede auditar, en vez de desaparecer en un `podadas.json`
+que no leia nadie.
+
+Imprime el recuento y la lista de ids retirados.
 """
 import datetime
 import json
@@ -60,9 +65,20 @@ def main():
     with open(os.path.join(DATA, "tailor.json"), "w", encoding="utf-8") as fh:
         json.dump(nuevo_tailor, fh, ensure_ascii=False)
 
-    with open(os.path.join(DATA, "podadas.json"), "w", encoding="utf-8") as fh:
-        json.dump([{"id": o["id"], "empresa": o.get("empresa"), "puesto": o.get("puesto"),
-                    "publicada": o.get("publicada")} for o in retirar], fh, ensure_ascii=False)
+    # Se anotan en `filtradas` (misma forma que las que aparta filtrar.py), no
+    # en un fichero aparte: el dashboard ya pinta esa coleccion con su motivo y
+    # su recuento, y exportar_snapshot.py se la lleva al snapshot.
+    filtradas = cargar("filtradas.json", {})
+    for o in retirar:
+        filtradas[o["id"]] = {
+            "id": o["id"], "empresa": o.get("empresa"), "puesto": o.get("puesto"),
+            "fuente": o.get("fuente"), "url": o.get("url") or o.get("url_apply") or "",
+            "motivo": "podada",
+            "detalle": f"publicada el {o.get('publicada')}, mas de 45 dias sin seguimiento",
+            "fecha": HOY.isoformat(),
+        }
+    with open(os.path.join(DATA, "filtradas.json"), "w", encoding="utf-8") as fh:
+        json.dump(filtradas, fh, ensure_ascii=False)
 
 
 if __name__ == "__main__":

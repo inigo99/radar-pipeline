@@ -1,0 +1,26 @@
+# La tarea diaria clona este repo y ejecuta lo que encuentre en `master`. Si lo
+# que hay en master está roto, el fallo aparece a las 10:00 de la mañana
+# siguiente, en una ejecución automática que nadie está mirando, y el dashboard
+# se regenera mal o no se regenera. Esto lo mueve al push.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar jsdom (para el test de paridad)
+        run: npm install jsdom --no-save
+      - name: Pipeline completo sobre la fixture sintética
+        run: python tests/smoke.py

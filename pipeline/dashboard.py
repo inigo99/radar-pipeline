@@ -721,8 +721,15 @@ async function initEstado(){
     snap.docs.forEach(d=>{
       const v=d.data(); if(!v) return;
       MANUAL[d.id]=v;
-      if(!DATA.some(r=>r.id===d.id)) DATA.push(v);
+      if(!DATA.some(r=>r.id===d.id)){ DATA.push(v); return; }
+      /* Ya esta horneada en DATA: la tarea diaria la recogio de
+         `ofertas`/`tailor` y este puente sobra. Se borra en vez de dejarlo
+         crecer, que es lo unico que hacia: un documento mas por oferta manual,
+         para siempre, que ademas guarda una copia de la fila que ya no es la
+         buena. */
+      db.doc('manual/'+d.id).delete().catch(()=>{});
     });
+    refrescaFoco();
     render();
   }, e=>{});
 }
@@ -1063,11 +1070,20 @@ function pesoFamilia(familia){
   return PESO_FAMILIA[familia] != null ? PESO_FAMILIA[familia] : PESO_FAMILIA_DEFECTO;
 }
 
+/* Días naturales, como `dias_desde()` en pipeline/foco.py: de medianoche a
+   medianoche. Con `Date.now()` daba un día de MÁS a partir del mediodía (la
+   hora del día se colaba en la división y `Math.round` la subía), así que el
+   «hace N días» de la ficha cambiaba durante la tarde y una oferta de 7 días
+   pasaba a 8 -- y 8 ya es otra ventana de frescura, 0,85 en vez de 1,0. Lo
+   cazó tests/paridad.mjs. `Math.round` se queda para absorber el cambio de
+   hora de octubre. */
 function diasDesde(publicada){
   if(!publicada) return null;
   const d = new Date(String(publicada).slice(0,10)+'T00:00:00');
   if(isNaN(d.getTime())) return null;
-  return Math.round((Date.now()-d.getTime())/86400000);
+  const h = new Date();
+  const hoy0 = new Date(h.getFullYear(), h.getMonth(), h.getDate()).getTime();
+  return Math.round((hoy0-d.getTime())/86400000);
 }
 function frescura(dias){
   if(dias==null) return [1.0,''];
@@ -2660,7 +2676,7 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
   clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),3200); }
 
 const MOT_CLS={salario:'p-mot-salario',modalidad:'p-mot-modalidad',ambito:'p-mot-ambito',experiencia:'p-mot-experiencia',duplicada:'p-mot-duplicada'};
-const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experiencia:'Experiencia',duplicada:'Duplicada',otro:'Otro'};
+const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experiencia:'Experiencia',duplicada:'Duplicada',podada:'Podada',otro:'Otro',/* los motivos que escribe pipeline/filtrar.py, tal cual los escribe */'empresa excluida':'Empresa excluida','palabra excluida':'Palabra excluida','salario por debajo del mínimo':'Salario','sin salario publicado':'Sin salario'};
 
 /* Lo que el filtro aparta. Existe porque un descarte silencioso no se puede
    discutir: si el mínimo de salario o los años están mal puestos, aquí se ve.
@@ -2984,7 +3000,7 @@ function stats(){
    ['Internacionales',''+DATA.filter(r=>r.ambito==='Internacional').length,'empresas de fuera que contratan desde aquí'],
    ['Foco IA/DS',''+DATA.filter(r=>FAMILIAS_FOCO.has(r.familia)).length,'AI/ML, GenAI, Computer Vision o Data Science/Eng.'],
    ['Portales',''+new Set(DATA.map(r=>r.fuente)).size,'LinkedIn, InfoJobs, JSearch, Tecnoempleo, Indeed y portales remotos'],
-   ['Salario medio',eur(med),'mín. filtrado: 45 000 €'],
+   ['Salario medio',eur(med),CFG.salario_min?`mín. filtrado: ${eur(CFG.salario_min)}`:'sin mínimo de salario'],
    ['Filtradas',''+FILTRADAS.length,'apartadas por salario o modalidad sin confirmar'],
    ['Sin tocar',''+DATA.filter(r=>st(r.id).estado==='activa'&&!apartadaExp(r)).length,'activas a las que aún no has aplicado ni descartado'],
    ['Por experiencia',''+apartadas().length,`piden más de ${aniosMios()} años; están en «Filtradas»`],
@@ -3012,6 +3028,28 @@ document.getElementById('ffue').insertAdjacentHTML('beforeend',
 document.getElementById('ffam').insertAdjacentHTML('beforeend',
   [...new Set(DATA.map(r=>r.familia))].sort((a,b)=>(FAMILIA_ES[a]||a).localeCompare(FAMILIA_ES[b]||b,'es'))
     .map(f=>`<option value="${esc(f)}">${esc(FAMILIA_ES[f]||f)}</option>`).join(''));
+/* El foco se recalcula al cargar la pagina, no se hereda de resultado.json
+   (18 sep 2026). `foco` y `dias` dependen de la fecha de HOY: si la tarea
+   diaria no corrio -- el ordenador apagado, que es un caso aceptado -- la cola
+   de <<Hoy>> ordenaba con la frescura del dia en que se publico la pagina y el
+   <<hace N dias>> de cada ficha mentia. Misma decision que `pipeline/focus.py`
+   en jobradar: un foco almacenado envejece, y una ordenacion rancia es peor
+   que repetir una multiplicacion. La aritmetica es la misma de
+   `pipeline/foco.py`, inyectada arriba (FRESCURA, PENALIZACION_SENIOR,
+   BONUS_SALARIO_PUBLICADO), asi que las dos no pueden divergir en silencio;
+   `tests/paridad.mjs` lo comprueba. `score_adap` y `prioridad` no se tocan. */
+function refrescaFoco(){
+  for(const r of DATA){
+    const prioridad = (typeof r.prioridad === 'number' && isFinite(r.prioridad))
+      ? r.prioridad
+      : Math.round(r.scoreAdap*pesoFamilia(r.familia)*10)/10;
+    const fc = calculaFoco(r.puesto, r.publicada, r.salOrigen, prioridad);
+    r.prioridad = prioridad;
+    r.foco = fc.foco; r.dias = fc.dias; r.motivoFoco = fc.motivoFoco;
+  }
+}
+
+refrescaFoco();
 render(); initEstado();
 </script>"""
 

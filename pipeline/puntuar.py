@@ -45,9 +45,11 @@ for o in OFERTAS:
                     prioridad=prioridad,
                     foco=foco, dias=dias, motivo_foco=motivo,
                     brecha=brecha_aprendizaje(o)))
+# El `foco` se guarda para que resultado.json salga ya ordenado y para poder
+# mirarlo por consola. El dashboard NO lo hereda: lo recalcula al cargar la
+# pagina (`refrescaFoco()`), porque depende de la fecha de hoy. Ver foco.py.
 res.sort(key=lambda r:-r["foco"])
 json.dump(res, open('data/resultado.json','w'), ensure_ascii=False, indent=1)
 print(f"{'EMPRESA':<28}{'PUESTO':<44}{'ORIG':>6}{'ADAP':>7}{'Δ':>6}  {'SALARIO':>17}")
 for r in res:
     print(f"{r['empresa'][:27]:<28}{r['puesto'][:43]:<44}{r['score_orig']:>6}{r['score_adap']:>7}{r['delta']:>+6}  {r['sal_min']//1000:>6}k-{r['sal_max']//1000}k {r['sal_origen'][:4]}")
-print("\ndescartadas por <35k:", [r['empresa'] for r in res if r['sal_medio']<35000])

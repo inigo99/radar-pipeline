@@ -47,18 +47,57 @@ playwright ni poppler.
 | `puntuar.py` | ofertas, perfil | `data/resultado.json` con la puntuación original, la adaptada y el foco |
 | `foco.py` | una oferta y su prioridad | el orden «foco»: prioridad menos antigüedad y menos títulos de sénior |
 | `experiencia.py` | el perfil y el texto de una oferta | los años que suma el CV y los que pide el anuncio |
-| `backfill_anios.py` | `data/` | rellena `anios_min` en las ofertas viejas leyendo sus alertas y notas (uno y no más) |
 | `dedupe.py` | ofertas candidatas y lo ya conocido | las que de verdad son nuevas |
 | `lint.py` | el perfil | las banderas rojas del CV base |
 | `embudo.py` | estado, correo, resultado | `data/embudo.json`: conversión por fuente, familia y tramo |
 | `dashboard.py` | resultado, perfil, tailor, filtradas, embudo | `out/dashboard.html`, la página completa |
 | `exportar_snapshot.py` | todo `data/` | `out/snapshot.json`, que se sube a `pipeline/snapshot` |
 
+`tools/backfill_anios.py` rellenaba `anios_min` en las ofertas viejas leyendo
+sus alertas y notas. Se ejecutó una vez, el 10-sep-2026, y vive en `tools/`
+—no en `pipeline/`— para que nadie la encadene por error a la tarea diaria:
+reescribe `data/ofertas.json` entero.
+
 `embudo.py` **no es opcional**: si no se ejecuta, `data/embudo.json` no existe y la
 pestaña «Embudo» del dashboard sale vacía aunque haya candidaturas registradas.
 
 `datos.py` es el único punto de carga; `ofertas.py`, `tailor.py`, `base_cv.py` y
 `perfil.py` son envoltorios finos sobre él.
+
+## La tarea diaria
+
+El procedimiento de la tarea programada de las 10:00 está en
+[`TAREA_DIARIA.md`](TAREA_DIARIA.md), en este repo. El prompt del trigger no lo
+repite: lo apunta (ver [`docs/prompt_tarea.md`](docs/prompt_tarea.md)). Así un
+cambio de procedimiento es un commit que se puede leer, revisar y revertir, en
+vez de un texto que sólo existe dentro del trigger.
+
+## Pruebas
+
+```bash
+python tests/smoke.py          # el pipeline entero sobre una fixture sintética
+npm install jsdom --no-save    # opcional: habilita el test de paridad
+```
+
+El repo no tiene datos, así que hasta ahora no había forma de probarlo sin la
+base de datos del artifact delante. `tests/fixture.py` reproduce el **esquema**
+—cuatro ofertas elegidas para tocar los caminos que se han roto alguna vez, un
+perfil mínimo pero completo— y `tests/smoke.py` ejecuta encima el pipeline
+completo, el round-trip del snapshot, la poda, el filtrado, `node --check`
+sobre el `<script>` de la página y una comprobación de que el `bundle.min.js`
+no se ha quedado por detrás de sus fuentes.
+
+`tests/paridad.mjs` es el que se gana el sitio: la misma aritmética vive dos
+veces —en Python, que es lo que corre la tarea, y portada a JavaScript dentro
+de `dashboard.py`, para el botón «+ Oferta» y el orden de la página— y las
+constantes se inyectan pero la lógica está escrita dos veces. El test carga la
+página con jsdom y llama a sus funciones con los mismos datos con los que corrió
+el pipeline. En su primera ejecución encontró que `diasDesde()` daba un día de
+más a partir del mediodía, que es media ventana de frescura de diferencia.
+
+Todo esto corre en cada push (`.github/workflows/ci.yml`). Importa porque la
+tarea diaria clona `master` a ciegas: lo que esté roto en master se descubre de
+otro modo a las 10:00 de la mañana siguiente, en una ejecución que nadie mira.
 
 ## El snapshot
 

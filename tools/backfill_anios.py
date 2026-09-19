@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 """Rellena `anios_min` en las ofertas que ya estaban en el radar (uno y no más).
 
-    python pipeline/backfill_anios.py [margen]     # desde la raíz del repo
+    python tools/backfill_anios.py [margen]     # desde la raíz del repo
+
+Herramienta de un solo uso: se ejecutó el 10 sep 2026 y no forma parte del
+pipeline diario. Vive en `tools/` justamente para que nadie la encadene por
+error a la tarea: reescribe `data/ofertas.json` entero.
 
 Las ofertas anteriores al 10 sep 2026 no traen el campo, pero muchas llevan el
 dato escrito en su `alerta`, en las etiquetas de sus `reqs`, en `sal_base` o en
@@ -10,7 +14,7 @@ inventa nada, sólo lee lo que ya estaba escrito. Las que no lo digan se quedan
 sin campo, y sin campo no se aparta ninguna oferta.
 """
 import json, os, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'pipeline'))
 from experiencia import anios_pedidos, anios_perfil, clasifica
 
 DATA = os.environ.get("RADAR_DATA", "data")

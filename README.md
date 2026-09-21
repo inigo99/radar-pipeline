@@ -92,7 +92,8 @@ vez de un texto que sólo existe dentro del trigger.
 python tests/smoke.py          # el pipeline entero sobre una fixture sintética
 python tests/test_dedupe.py    # deduplicación: hashes truncados, huella, poda vetada
 python tests/test_lint.py      # las 18 reglas del linter del CV
-npm install                    # jsdom (test de paridad) y terser (build del bundle)
+python tests/test_fuentes.py   # extractores de pipeline/fuentes/ (LinkedIn/InfoJobs/Manfred)
+npm install                    # jsdom, sólo para tests/paridad.mjs
 ```
 
 El repo no tiene datos, así que hasta ahora no había forma de probarlo sin la
@@ -100,11 +101,8 @@ base de datos del artifact delante. `tests/fixture.py` reproduce el **esquema**
 —cuatro ofertas elegidas para tocar los caminos que se han roto alguna vez, un
 perfil mínimo pero completo— y `tests/smoke.py` ejecuta encima el pipeline
 completo, el round-trip del snapshot, la poda, el filtrado, `node --check`
-sobre el `<script>` de la página y que el `bundle.min.js` sea exactamente lo
-que produce `node tools/build_bundle.js` sobre las fuentes actuales (no sólo
-que no falte ninguna función por nombre, que es lo que había hasta el
-19-sep-2026 y no detectaba un bundle desactualizado si cambiaba el cuerpo de
-una función sin cambiar su nombre).
+sobre el `<script>` de la página y, desde el 21-sep-2026, `tests/test_fuentes.py`
+(los extractores de `pipeline/fuentes/`, ver esa sección más abajo).
 
 `tests/paridad.mjs` es el que se gana el sitio: la misma aritmética vive dos
 veces —en Python, que es lo que corre la tarea, y portada a JavaScript dentro
@@ -140,81 +138,132 @@ Lleva `generado` y `n_ofertas` justamente para poder desconfiar de él: si el
 recuento no cuadra con la colección, se ignora, se vuelve al volcado por
 colecciones y se regenera al final de la ejecución.
 
-## `browser/`: los extractores de los portales
+## `pipeline/fuentes/`: los extractores de los portales
 
-LinkedIn e InfoJobs no se dejan leer con WebFetch ni por HTTP directo. Hay que
-usar un navegador y hacer `fetch` desde una pestaña del propio dominio, y ahí el
-coste está en el HTML que se descarga y se tira. Estos ficheros son ese trabajo
-ya resuelto, para no volver a derivarlo —ni a romperlo— cada mañana:
+LinkedIn e InfoJobs no se dejan leer con WebFetch ni por HTTP directo — hacen
+falta cabeceras y comportamiento de navegador real. Hasta el 21-sep-2026 la
+única forma de conseguir eso desde la tarea diaria era pegar JS como código en
+una pestaña de Claude en Chrome y parsear el HTML ahí mismo (`browser/*.js`,
+retirado; ver «Por qué se pegaba código» más abajo si hace falta la
+arqueología). Desde entonces, la tarea usa **Scrapling**
+(`mcp__remote-devices__ScraplingServer__*`, un MCP local en el dispositivo de
+Íñigo) para traer el HTML/JSON, y estos ficheros —Python normal, en el
+repo— lo analizan:
 
 | Fichero | Qué trae |
 |---|---|
-| `common.js` | normalización, HTML a texto, clasificación de modalidad y ámbito, filtro de títulos, tandas con pausa y reintento de `429` |
-| `linkedin.js` | endpoint de invitado, parseo por `<li>`, criba y fichas |
-| `infojobs.js` | listado por regex sobre el HTML crudo, recorte de la descripción, fichas |
-| `manfred.js` | API JSON pública de Manfred: salario, `remotePercentage` y técnicas con nivel ya estructurados, sin parseo de HTML |
-| `vocabulario.js` | diccionario término → regex para redactar los `reqs`, sin leer la ficha entera |
-| `bundle.min.js` | los tres primeros (común + LinkedIn + InfoJobs), concatenados y minificados |
+| `comun.py` | normalización, HTML a texto, clasificación de modalidad y ámbito, filtro de títulos |
+| `vocabulario.py` | diccionario término → regex para redactar los `reqs`, sin leer la ficha entera |
+| `linkedin.py` | endpoint de invitado, parseo por `<li>`, criba y fichas |
+| `infojobs.py` | listado por regex sobre el HTML/markdown, recorte de la descripción, fichas |
+| `manfred.py` | API JSON pública de Manfred: salario, `remotePercentage` y técnicas con nivel ya estructurados, sin parseo de HTML |
 
-`bundle.min.js` se genera con `node tools/build_bundle.js` (necesita
-`npm install`, que instala `terser`). **No se edita a mano ni se regenera con
-otro comando**: `tests/smoke.py` reconstruye el bundle con este mismo script y
-compara bytes contra el commiteado, así que un bundle generado de otra forma
-(u olvidado de regenerar tras tocar una fuente) hace fallar el test.
+Cada uno es un CLI (`python pipeline/fuentes/linkedin.py <subcomando> ...`) y
+también una librería normal (`from pipeline.fuentes import linkedin`) para
+quien prefiera importar las funciones directamente en vez de pasar por JSON en
+disco.
 
-**Manfred no necesita subagente.** Como usa una API JSON en vez de HTML, no
-tiene el coste que justifica pegar código en una pestaña sólo por LinkedIn e
-InfoJobs — pero sí necesita el navegador (el proxy de salida de la nube
-bloquea `getmanfred.com` igual que bloquea el resto), así que va en el hilo
-principal, nunca en el subagente de Tecnoempleo/Indeed: ese subagente no
-tiene navegador y Manfred se queda sin cubrir si se le delega ahí (pasó el
-16-sep-2026).
+### Por qué Scrapling y no el navegador manual
 
-### Cómo se cargan (y por qué no hay caché)
+`ScraplingServer.fetch`/`stealthy_fetch` navegan o piden la URL directamente
+(como una navegación real o un cliente HTTP), no inyectan JS en una página ya
+cargada vía CDP. Eso cambia lo que aplica:
 
-**Se pegan como código** en una llamada a `javascript_tool` al empezar con cada
-dominio, y quedan en `window.__radar` para el resto de la sesión de esa pestaña.
-Unos 10 KB, una vez por dominio y ejecución. Para LinkedIn e InfoJobs, carga
-también `vocabulario.js` desde el principio (junto con `common.js` y
-`linkedin.js`/`infojobs.js`): desde el 16-sep-2026 `detallar()` saca los
-términos del vocabulario en la misma pasada que la modalidad, así que cada
-ficha se pide una sola vez en toda la ejecución — antes se pedía dos, una para
-filtrar (paso 4) y otra para escribir los `reqs` (paso 6), literalmente el
-mismo HTML descargado dos veces.
+- La CSP de LinkedIn (bloquea `fetch` a hosts externos, `<script src>` e
+  `eval`/`new Function`, ver «Tres atajos que no sirvieron» más abajo) y la
+  necesidad de CORS desde el propio dominio **no aplican**: Scrapling no es
+  código que corre dentro de la página, es el propio navegador pidiendo la
+  URL.
+- Desaparece el límite de ~1.200 caracteres de salida de `javascript_tool`
+  (y con él, las tandas, las pausas y el trocear los ficheros de `browser/`
+  en sentencias sueltas para poder pegarlas en varias llamadas): cada llamada
+  de Scrapling devuelve el contenido completo.
+- Cada fuente necesita una herramienta distinta según cómo reacciona a la
+  petición — comprobado con datos reales el 21-sep-2026, no en teoría:
+  - **LinkedIn** (listado y ficha): `fetch` normal con `real_chrome:true,
+    disable_resources:true` basta, sin login (endpoints de invitado).
+  - **InfoJobs listado**: `fetch` normal también, pero con
+    `extraction_type:"markdown", main_content_only:true` — el HTML crudo son
+    1,5M de caracteres, en markdown ~50K, y las URLs `of-i<hash>` se
+    extraen igual.
+  - **InfoJobs ficha**: `fetch` normal devuelve un captcha GeeTest (HTTP 405).
+    Hace falta `stealthy_fetch` con `real_chrome:true, solve_cloudflare:true,
+    network_idle:true, wait:1500`.
+  - **Manfred** (listado y ficha): `make_request` puro (ni siquiera
+    navegador, es JSON) — pero **con `extraction_type:"text"`, nunca
+    `"markdown"`**: el extractor markdown escapa los guiones bajos dentro de
+    los valores del JSON (`Centellic_Ago26_...` → `Centellic\_Ago26\_...`) y
+    eso rompe `json.loads()`. Con `"text"` el JSON llega intacto.
 
-Ese segundo ahorro no se aprovechaba del todo: el paso 6 seguía volcando la
-ficha entera al contexto para redactar los `reqs`, aunque ya no hiciera falta
-un segundo `fetch` para conseguirla — sólo se ahorraba la descarga, no la
-lectura. Desde el 16-sep-2026, `li.snippets(id)` / `ij.snippets(hash)`
-devuelven, de una sola oferta, los términos con más apariciones junto con un
-fragmento corto (~110 caracteres) de dónde aparece cada uno por primera vez
-— lo justo para decidir el peso («imprescindible» pesa más que «se
-valorará») y copiar la etiqueta en las palabras del anuncio, sin las
-900-1.200 caracteres de `li.leer()`/`ij.leer()`. Estas dos funciones quedan
-como último recurso: cuando la lista de términos sale corta o rara, o para
-redactar el `resumen` de `tailor`. Para **Manfred** no hace falta ni eso:
-`o.reqs` ya sale de `detallar()` con el formato exacto de `vocabulario.md`
-(`[clave, peso, etiqueta]`), calculado a partir del nivel y la sección de
-cada técnica (`MAPA_TECH`/`WEIGHT` en `manfred.js`) — se copia tal cual.
+Sigue haciendo falta el dispositivo de Íñigo para las tres: el proxy de salida
+de la nube bloquea `linkedin.com`, `infojobs.net` y `getmanfred.com` igual que
+antes, y Scrapling corre ahí, no en la nube. **Ya no hace falta ni Claude en
+Chrome ni el navegador integrado de la app** — ninguna de las tres fuentes
+implica leer la página como la vería una persona.
 
-Se probaron tres atajos el 9 de septiembre de 2026 y **los tres fallan en
-linkedin.com**; no vuelvas a intentarlos:
+**Manfred sigue sin necesitar subagente**, y ahora todavía menos: como es una
+API JSON pedida con `make_request` (ni siquiera abre un navegador), no tiene
+ni el coste que en su día justificó tratarla aparte. Se deja en el hilo
+principal por ahora de todos modos — mover el reparto de agentes es un cambio
+distinto al de esta migración, ver `TAREA_DIARIA.md`.
 
-| Atajo | Qué pasa |
+Cada ficha se pide una sola vez en toda la ejecución: `detallar_una()` calcula
+los términos del vocabulario en la misma pasada que la modalidad (desde el
+16-sep-2026, heredado de `common.js`), así que el paso de fichas no necesita
+un segundo `fetch` para escribir los `reqs`. Los subcomandos `snippets` de
+`linkedin.py`/`infojobs.py` devuelven, de una sola oferta, los términos con
+más apariciones junto con un fragmento corto (~110 caracteres) de dónde
+aparece cada uno por primera vez — lo justo para decidir el peso
+(«imprescindible» pesa más que «se valorará») y copiar la etiqueta en las
+palabras del anuncio, sin los 900-1.200 caracteres del subcomando `leer`.
+`leer` queda como último recurso: cuando la lista de términos sale corta o
+rara, o para redactar el `resumen` de `tailor`. Para **Manfred** no hace
+falta ni eso: `oferta["reqs"]` ya sale de `detallar_una()` con el formato
+exacto de `vocabulario.md` (`[clave, peso, etiqueta]`), calculado a partir
+del nivel y la sección de cada técnica (`MAPA_TECH`/`WEIGHT` en `manfred.py`)
+— se copia tal cual.
+
+### Dos bugs que la migración sacó a la luz
+
+Portar `manfred.js` a Python con datos reales (no la fixture sintética) hizo
+saltar dos asunciones de forma de la API que llevaban tiempo mal y en
+silencio, porque en JS fallan de formas que no rompen nada visible:
+
+- **`locations` es una lista de strings** (`["Vigo, España"]`), no de objetos
+  `{city, town}` como asumía `browser/manfred.js`. En JS, `l.city` sobre un
+  string da `undefined` y el `join` sale vacío sin avisar — la rebaja a
+  modalidad `local` por zona nunca disparaba para Manfred, en ninguna
+  ejecución, y no se notaba porque el silencio no lanza error. En Python es
+  un `AttributeError` directo. `manfred.py` acepta ambas formas.
+- **`responsibilities` es una lista de strings markdown**, no un único bloque
+  HTML. `_stripHtml(j.responsibilities || ...)` en `browser/manfred.js` hace
+  `.replace` sobre lo que le llegue; un array no tiene `.replace` y esa línea
+  revienta con `TypeError` en cualquier ficha real con `responsibilities`
+  relleno — es decir, en la inmensa mayoría. `manfred.py` une la lista con
+  saltos de línea antes de limpiar HTML.
+
+Los dos quedan cubiertos en `tests/test_fuentes.py`
+(`test_manfred_locations_como_lista_de_strings`,
+`test_manfred_responsibilities_como_lista`) para que no vuelvan en silencio.
+
+### Por qué se pegaba código (arqueología, ya no aplica)
+
+Hasta el 21-sep-2026, LinkedIn bloqueaba los tres atajos obvios para no pegar
+~800 líneas de JS cada mañana. Se dejan documentados por si alguien reconsidera
+volver a un enfoque de navegador manual en el futuro:
+
+| Atajo | Qué pasaba |
 |---|---|
 | `fetch` a `raw.githubusercontent` | Bloqueado: `connect-src` de la CSP. |
 | `<script src>` desde jsDelivr | Bloqueado: `script-src-elem` con nonce y `strict-dynamic`. |
-| Cachear en `localStorage` y `eval` | LinkedIn **parchea** `localStorage` (`Storage.prototype.setItem` ya no es nativo): `setItem` no lanza pero no guarda nada. Y aunque guardara, `eval` y `new Function` están bloqueados por CSP (`unsafe-eval` no está permitido). IndexedDB sí escribe, pero sigue haciendo falta `eval` para ejecutar lo leído, así que tampoco sirve. |
+| Cachear en `localStorage` y `eval` | LinkedIn **parchea** `localStorage` (`Storage.prototype.setItem` ya no es nativo): `setItem` no lanza pero no guarda nada. Y aunque guardara, `eval` y `new Function` están bloqueados por CSP (`unsafe-eval` no está permitido). IndexedDB sí escribía, pero seguía haciendo falta `eval` para ejecutar lo leído. |
 
-El código que inyecta `javascript_tool` no pasa por la CSP porque entra por CDP,
-no por el parser de la página. Por eso pegar funciona y todo lo demás no.
+El código que inyectaba `javascript_tool` no pasaba por la CSP porque entraba
+por CDP, no por el parser de la página — por eso pegar funcionaba y todo lo
+demás no. Scrapling no tiene este problema porque no inyecta nada: pide la URL
+como la pediría cualquier navegador o cliente HTTP normal.
 
-Los ficheros están troceados en sentencias independientes (`;void function(e){…}`)
-para poder pegarlos en varias llamadas: la entrada y la salida de las
-herramientas de navegador se cortan sobre los 1.200 caracteres. Unir los trozos
-con `;` + `function(e){` da SyntaxError; hay que dejar el `void`.
-
-### Dos trampas que ya costaron una tanda entera de `fetch`
+### Dos trampas que ya costaron una tanda entera de `fetch` (siguen vigentes)
 
 - La detección de modalidad **tiene que incluir `\b remote \b` y `\b remoto \b`
   a secas** (sin los espacios). Una primera versión sólo buscaba «100% remoto»,
@@ -223,6 +272,9 @@ con `;` + `function(e){` da SyntaxError; hay que dejar el `void`.
 - En InfoJobs hay que **recortar la descripción antes de contar términos**:
   sobre el HTML completo, `\.net` casa con «infojobs.net» y da 45 apariciones de
   C#/.NET en todas las ofertas.
+
+Las dos siguen exactamente igual tras el port a Python (mismos regex, mismo
+comentario) y las dos tienen test de regresión en `tests/test_fuentes.py`.
 
 ## Modalidad: `remoto_sin_confirmar`
 
@@ -236,26 +288,27 @@ auditar; una alerta, sí.
 ## Qué modalidades se buscan: `buscar_remoto`/`buscar_hibrido`/`buscar_presencial`
 
 Hasta el 16-sep-2026 esto era un único interruptor (`solo_remoto`) que, en la
-práctica, no hacía nada: `li.clasificar()`, `ij.clasificar()` y `mf.filtrar()`
-tenían el remoto/local/`remoto_sin_confirmar` **fijo en el código**, así que
-poner `solo_remoto` a `false` en el dashboard no cambiaba nada — híbrido y
+práctica, no hacía nada: los extractores tenían el
+remoto/local/`remoto_sin_confirmar` **fijo en el código**, así que poner
+`solo_remoto` a `false` en el dashboard no cambiaba nada — híbrido y
 presencial (fuera de las zonas locales) nunca llegaban a `candidatas`, los
 descartara quien los descartara.
 
 Ahora hay tres campos independientes en `config/filtros` —
 `buscar_remoto`, `buscar_hibrido`, `buscar_presencial` — y los tres extractores
-reciben la configuración en vez de tenerla escrita a fuego:
+(`pipeline/fuentes/{linkedin,infojobs,manfred}.py`) reciben la configuración en
+vez de tenerla escrita a fuego:
 
-    li.clasificar(CFG)
-    ij.clasificar(CFG)
-    mf.filtrar(idsConocidos, desde, CFG)
+    linkedin.clasificar(detalladas, cfg=CFG)
+    infojobs.clasificar(detalladas, cfg=CFG)
+    manfred.filtrar(ofertas, ids_conocidos, desde, cfg=CFG)
 
-`R.modalidadesAceptadas(cfg)` (en `common.js`) es la única fuente de verdad
-sobre qué `modalidad.tipo` pasa el filtro. `local` (las zonas de
-`areas_locales`, Navarra/Gipuzkoa por defecto) entra **siempre**, gane o
-pierda cualquiera de los otros tres campos: es una excepción por zona, no una
-modalidad más. Sin argumento (o con los tres campos a `undefined`), la
-función se comporta como el valor por defecto del dashboard — sólo remoto —
+`comun.modalidades_aceptadas(cfg)` es la única fuente de verdad sobre qué
+`modalidad["tipo"]` pasa el filtro. `local` (las zonas de `areas_locales`,
+Navarra/Gipuzkoa por defecto) entra **siempre**, gane o pierda cualquiera de
+los otros tres campos: es una excepción por zona, no una
+modalidad más. Sin `cfg` (o con los tres campos ausentes), la función se
+comporta como el valor por defecto del dashboard — sólo remoto —
 para que un extractor viejo o un olvido no abra la puerta de golpe.
 
 **Manfred distingue híbrido de presencial mejor que LinkedIn o InfoJobs**,
@@ -278,8 +331,8 @@ cuesta la configuración y se puede cambiar con conocimiento de causa.
 
 Hasta el 16-sep-2026, `excluir_keywords`, `excluir_empresas`, `salario_min`
 y `exigir_salario_publicado` se aplicaban a ojo sobre las candidatas. Aparte
-del tiempo, dejaba un hueco real: `li.filtrar()` sí aplicaba
-`excluir_empresas`, pero `ij.filtrar()` y `mf.filtrar()` nunca lo hicieron —
+del tiempo, dejaba un hueco real: `linkedin.filtrar()` sí aplicaba
+`excluir_empresas`, pero `infojobs.filtrar()` y `manfred.filtrar()` nunca lo hicieron —
 una intermediaria vetada que llegara por InfoJobs, Manfred o el subagente de
 Tecnoempleo/Indeed sólo se caía si alguien la pillaba a tiempo. Ahora
 `pipeline/filtrar.py` aplica esas cuatro reglas en código, igual para las
@@ -288,11 +341,12 @@ candidatas de cualquier fuente, entre el paso 4 y `dedupe.py`:
     python pipeline/filtrar.py candidatas.json data/ok.json --filtros filtros.json
 
 Sólo esas cuatro — **modalidad y `ambitos` siguen sin tocarse aquí, a
-propósito, pero por motivos distintos**. La modalidad ya se decide en el
-navegador con la configuración de verdad (`buscar_remoto`/`buscar_hibrido`/
-`buscar_presencial`, ver más arriba): filtrarla otra vez en Python sería
-repetir un trabajo ya hecho, no tapar un hueco. Y `ambitos` necesita saber si
-la frase que encuentra `R.ambito()` es una restricción o una apertura —
+propósito, pero por motivos distintos**. La modalidad ya se decide al
+clasificar la ficha con la configuración de verdad (`buscar_remoto`/
+`buscar_hibrido`/`buscar_presencial`, ver más arriba): filtrarla otra vez en
+Python sería repetir un trabajo ya hecho, no tapar un hueco. Y `ambitos`
+necesita saber si la frase que encuentra `comun.ambito()` es una restricción
+o una apertura —
 gramaticalmente son iguales, así que decidirlo a ciegas es inventarse un
 criterio y arriesgarse a tirar una oferta buena, justo lo que avisa
 `pipeline/vocabulario.md`. Eso sigue necesitando que alguien lea la frase.
@@ -316,8 +370,8 @@ oferta de Sopra Steria que ya estaba, dos veces, con dos ids del mismo hash
 (16-sep-2026). El paso 1 ahora compara los ids `ij-*` por prefijo compartido
 en vez de por igualdad, así que el bug no depende de que nadie vuelva a
 truncar bien — pero al escribir un id nuevo en el paso 6, usa siempre
-`ij.idPara(o)` (`browser/infojobs.js`), que fija la longitud en 12
-caracteres, para no depender de esa tolerancia. La misma ejecución coló
+`infojobs.id_para(o)` (`pipeline/fuentes/infojobs.py`), que fija la longitud
+en 12 caracteres, para no depender de esa tolerancia. La misma ejecución coló
 «Grupo Santander» junto a «Banco Santander» como si fueran dos empresas: por
 eso `Banco` está ahora en `SUFIJOS_SOCIEDAD`.
 

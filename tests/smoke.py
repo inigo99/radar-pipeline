@@ -22,8 +22,10 @@ Qué hace, en orden:
   5. `filtrar.py` aparta lo que dicen `excluir_empresas`/`salario_min`;
   6. `node --check` sobre el `<script>` de la página y, si hay jsdom,
      `tests/paridad.mjs` (la aritmética duplicada en JS tiene que dar lo mismo);
-  7. las funciones de `browser/*.js` están también en `bundle.min.js` (avisa si
-     alguien tocó una fuente y se olvidó de regenerar el bundle).
+  7. `tests/test_fuentes.py`: los extractores de `pipeline/fuentes/`
+     (LinkedIn/InfoJobs/Manfred, el reemplazo Scrapling+Python de
+     `browser/*.js` desde el 21-sep-2026) importan limpio y no han
+     regresado en ninguno de los bugs históricos que motivaron cada test.
 
 Sale con código 1 a la primera que falle, y dice cuál.
 """
@@ -188,48 +190,12 @@ def main():
                              "la aritmética de la página coincide con la del pipeline"):
                 print(r.stderr[-1500:])
 
-    print("\n[6] bundle.min.js al día")
-    bundle = open(os.path.join(RAIZ, "browser", "bundle.min.js"), encoding="utf-8").read()
-
-    # Chequeo fuerte (19-sep-2026): reconstruir el bundle de verdad con
-    # tools/build_bundle.js y comparar byte a byte contra el commiteado. El
-    # chequeo antiguo (nombre de función como subcadena) no detectaba un
-    # bundle desactualizado si el CUERPO de una función cambiaba sin cambiar
-    # su nombre; esto sí, porque es literalmente la misma reconstrucción.
-    reconstruido = False
-    if node:
-        tiene_terser = subprocess.run(
-            [node, "-e", "import('terser').then(()=>process.exit(0),()=>process.exit(1))"],
-            capture_output=True, text=True, cwd=RAIZ).returncode == 0
-        if tiene_terser:
-            salida = os.path.join(tmp, "bundle_reconstruido.js")
-            r = subprocess.run([node, os.path.join(RAIZ, "tools", "build_bundle.js"), salida],
-                               capture_output=True, text=True, cwd=RAIZ)
-            if comprueba(r.returncode == 0, "tools/build_bundle.js reconstruye el bundle sin errores"):
-                nuevo = open(salida, encoding="utf-8").read()
-                if not comprueba(nuevo == bundle,
-                                 "browser/bundle.min.js coincide byte a byte con "
-                                 "`node tools/build_bundle.js` sobre las fuentes actuales"):
-                    print("    -> alguien tocó common.js/linkedin.js/infojobs.js sin regenerar el "
-                          "bundle (o tocó el bundle a mano). Corre `node tools/build_bundle.js`.")
-                reconstruido = True
-            else:
-                print(r.stderr[-1000:])
-        else:
-            print("  (sin terser: `npm install` para el chequeo fuerte del bundle)")
-
-    if not reconstruido:
-        # Respaldo sin red/terser: al menos que no falte ninguna función por nombre.
-        faltan = []
-        for f in ("common.js", "linkedin.js", "infojobs.js"):
-            src = open(os.path.join(RAIZ, "browser", f), encoding="utf-8").read()
-            for nombre in set(re.findall(r"^\s*(?:R|li|ij)\.([A-Za-z_][A-Za-z0-9_]*)\s*=", src, re.M)):
-                if nombre not in bundle:
-                    faltan.append(f"{f}:{nombre}")
-        comprueba(not faltan,
-                  "(chequeo débil, sin terser) toda función de common/linkedin/infojobs "
-                  "está en el bundle"
-                  + (f" (faltan: {', '.join(sorted(faltan)[:6])})" if faltan else ""))
+    print("\n[6] pipeline/fuentes/ importa limpio y pasa sus tests")
+    r = subprocess.run([sys.executable, os.path.join(RAIZ, "tests", "test_fuentes.py")],
+                       capture_output=True, text=True, cwd=RAIZ)
+    print(r.stdout.rstrip())
+    if not comprueba(r.returncode == 0, "tests/test_fuentes.py (comun/vocabulario/linkedin/infojobs/manfred)"):
+        print(r.stderr[-1500:])
 
     print()
     if FALLOS:

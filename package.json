@@ -1,14 +1,12 @@
 {
   "name": "radar-pipeline-tools",
   "private": true,
-  "description": "Herramientas de Node del repo: sólo para tests y build del bundle del navegador. El pipeline en sí es Python puro (ver README.md).",
+  "description": "Herramientas de Node del repo: sólo para tests de paridad JS/Python. El pipeline en sí (incluida la extracción de fuentes) es Python puro (ver README.md).",
   "type": "module",
   "scripts": {
-    "build:bundle": "node tools/build_bundle.js",
     "test:paridad": "node tests/paridad.mjs"
   },
   "devDependencies": {
-    "jsdom": "^24.0.0",
-    "terser": "^5.31.0"
+    "jsdom": "^24.0.0"
   }
 }

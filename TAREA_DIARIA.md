@@ -31,44 +31,56 @@ dashboard).
 - Lo que la tarea **nunca** escribe: `config/filtros` y `estado` son de Íñigo.
   Si un filtro parece estar costando ofertas buenas, se dice en el resumen del
   día y decide él.
-- **Navegador: primero Claude en Chrome** (`mcp__claude-in-chrome__*`, cargadas
-  con `ToolSearch` en una sola llamada). Llamar a `tabs_context_mcp`; si
-  responde, abrir una **pestaña nueva** con `tabs_create_mcp` y trabajar ahí —
-  es su Chrome, con su sesión de LinkedIn iniciada. No tocar las pestañas que
-  ya tuviera abiertas; cerrar al final sólo las que se hayan abierto aquí. Si
-  hay más de un Chrome conectado, preguntar cuál usar, no elegir. **Si Chrome
-  no responde**, usar el navegador integrado de la app de escritorio
-  (`mcp__remote-devices__Claude_Browser__*`) con `preview_start`: perfil propio,
-  sin sesión de LinkedIn necesariamente, pero el endpoint de invitado y las
-  fichas públicas se leen igual. **Si no hay ningún navegador** (ordenador
-  apagado o sin la app): no insistir, cubrir lo que no necesite navegador,
-  decir al final qué fuentes se han quedado sin cubrir y **no escribir
-  `config/estado_tarea`**, para que la ventana se recupere mañana.
-- **Sólo lectura en el navegador.** No inscribirse en ofertas, no enviar
-  mensajes ni invitaciones, no guardar ofertas, no cambiar ajustes ni cerrar
-  sesión. Si un portal pide login y no lo hay, o sale un captcha, anotarlo
-  como no comprobable y seguir — nunca insistir. Si una web pide aprobación de
-  acceso, esperar la respuesta en vez de buscar un rodeo.
-- **Cómo se lee una página, que es donde se va el presupuesto.** Nunca usar
-  `get_page_text`/`read_page` sobre la ficha de una oferta para decidir si
-  encaja, y no hacer capturas: una ficha son varios miles de tokens y de ellos
-  importan seis campos. Trabajar con `javascript_tool` desde una pestaña del
-  propio dominio (por CORS sólo funciona desde ahí): `fetch` de la ficha y
-  **regex sobre el HTML crudo**, una línea por oferta con los campos separados
-  por `|`. Los extractores depurados están en `browser/` (`common.js`,
-  `linkedin.js`, `infojobs.js`, `manfred.js`, `vocabulario.js`,
-  `bundle.min.js`; ver README, sección `browser/`, para por qué se pegan como
-  código en vez de cachearse). Cargar siempre `vocabulario.js` junto con
-  `common.js` y el extractor del dominio: `detallar()` calcula los `terminos`
-  del vocabulario en la misma pasada que la modalidad, así que el Paso 6 no
-  necesita repetir la lectura de la ficha sólo para los `reqs`.
-  Filtrar dentro de la página y devolver sólo lo que sobrevive: la salida de
-  `javascript_tool` se corta sobre 1.200 caracteres, así que hay que guardar en
-  `window.__algo` y sacar 6-8 ofertas por llamada con `window.__pull(n)`. Los
-  lotes largos de `fetch` dan timeout de CDP a los 45 s (tandas de 12-15 con
-  pausas de 150-300 ms); un `429` de LinkedIn se arregla reintentando a los
-  2-3 s, no significa oferta cerrada. Al navegar se pierde lo guardado en
-  `window`: extraer lo necesario **antes** de cambiar de dominio.
+- **Extracción con Scrapling, no con navegador manual** (desde el 21-sep-2026).
+  Las herramientas son `mcp__remote-devices__ScraplingServer__*`
+  (`fetch`, `stealthy_fetch`, `make_request`; cargar con `ToolSearch` si
+  aparecen diferidas). Corren en el dispositivo de Íñigo y usan su Chrome real
+  vía Playwright cuando hace falta navegador — no la extensión Claude en
+  Chrome ni el navegador integrado de la app: **esta tarea ya no necesita
+  ninguno de los dos**, porque nada implica leer una página como la vería una
+  persona ni interactuar con su interfaz. Si `ScraplingServer` no aparece o
+  falla en todas las llamadas (ordenador apagado o sin la app), no insistir:
+  cubrir lo que no lo necesite (Tecnoempleo/Indeed/semanales, que ya iban por
+  WebFetch/MCP), decir al final qué fuentes se han quedado sin cubrir y **no
+  escribir `config/estado_tarea`**, para que la ventana se recupere mañana.
+- **Qué herramienta según la fuente** (el porqué de cada una, con lo
+  comprobado en vivo el 21-sep-2026, está en README, sección
+  `pipeline/fuentes/`):
+  - **LinkedIn (listado y ficha):** `fetch` con `real_chrome:true,
+    disable_resources:true`. Endpoints de invitado, sin login.
+  - **InfoJobs (listado):** `fetch` con `real_chrome:true,
+    disable_resources:true` también vale, pero pedir además
+    `extraction_type:"markdown", main_content_only:true` (o un `css_selector`
+    más estrecho): el HTML crudo de esa página son 1,5M de caracteres y sólo
+    hace falta lo que lleva las URLs `of-i<hash>`.
+  - **InfoJobs (ficha): `stealthy_fetch`, no `fetch`.** Con
+    `real_chrome:true, solve_cloudflare:true, network_idle:true, wait:1500`.
+    Un `fetch` normal en la ficha devuelve un captcha GeeTest (HTTP 405,
+    «¿Eres humano o un robot?»), aunque el listado sí admita `fetch` normal —
+    no lo intentes con `fetch` primero para ahorrar, ya se sabe que falla.
+  - **Manfred (listado y ficha):** `make_request` — es una API JSON pública,
+    no hace falta navegador en absoluto. **Pedir siempre
+    `extraction_type:"text"`, nunca el `"markdown"` por defecto**: el
+    extractor markdown escapa guiones bajos dentro de los valores del JSON
+    (`Centellic_Ago26_...` → `Centellic\_Ago26\_...`) y eso rompe
+    `json.loads()`. Con `"text"` el JSON llega intacto.
+  - Manfred no necesita ordenador encendido tampoco por CORS ni nada parecido
+    — es HTTP puro —, pero sigue sin poder pedirse desde la nube: el proxy de
+    salida de la nube bloquea `getmanfred.com` igual que el resto de
+    portales, así que sigue yendo por `ScraplingServer` en el dispositivo.
+- **Sin límite de 1.200 caracteres, sin tandas ni pausas.** Cada llamada de
+  Scrapling devuelve el contenido completo tal cual (si es muy grande, la
+  herramienta lo guarda sola en un fichero y avisa cómo leerlo con jq/python;
+  no hay que trocear nada a mano ni guardar en `window`). El análisis del HTML
+  ya no se pega como JS en una pestaña: vive en `pipeline/fuentes/`
+  (`comun.py`, `vocabulario.py`, `linkedin.py`, `infojobs.py`, `manfred.py`),
+  Python normal en el repo. `detallar_una()` calcula los `terminos` del
+  vocabulario en la misma pasada que la modalidad, así que el Paso 6 no
+  necesita releer la ficha sólo para los `reqs`.
+- **Sólo lectura, igual que siempre.** Todo lo de arriba son peticiones GET a
+  endpoints públicos: no hay sesión que proteger ni pestañas que gestionar,
+  pero sigue sin tener sentido ni estar permitido inscribirse en ofertas,
+  enviar mensajes, guardar ofertas ni tocar ajustes de ningún portal.
 
 ## Paso 0 — Configuración y ventana
 
@@ -134,13 +146,18 @@ de hoy, usando `titulos` y `keywords`. **Filtrar siempre por título antes de
 pedir la ficha**, en todas las fuentes: es lo que evita la mayor parte del
 trabajo.
 
-**El reparto no se cambia:**
+**El reparto no se cambia** (aunque el motivo original ya no aplica del todo,
+ver abajo):
 
-- **LinkedIn, InfoJobs y Manfred, en el hilo principal.** Las herramientas del
-  navegador son una sola instancia y dos agentes a la vez se pisan. Manfred
-  tiene su propio script (`browser/manfred.js`, pegado una vez en una pestaña
-  de `getmanfred.com`) y va aquí, no en el subagente: un subagente sin
-  navegador no puede cubrirla de verdad.
+- **LinkedIn, InfoJobs y Manfred, en el hilo principal.** El motivo original
+  — «las herramientas del navegador son una sola instancia y dos agentes a la
+  vez se pisan» — ya no es del todo cierto con Scrapling: cada llamada abre y
+  cierra su propio proceso, no hay una pestaña compartida que pisarse. Se deja
+  igual de todos modos por ahora, para no cambiar dos cosas el mismo día (la
+  extracción y el reparto de agentes); si algún día conviene mover Manfred a
+  un subagente (es sólo JSON, ni siquiera necesita navegador vía
+  `make_request`), es un cambio aparte y deliberado, no un efecto colateral de
+  esta migración.
 - **Todo lo demás en UN solo subagente** (Tecnoempleo, Indeed y, los lunes,
   Himalayas/WeWorkRemotely/RemoteOK juntas), con `model: "sonnet"`. Recoger
   listados y filtrar por título no necesita más, y cada subagente nuevo
@@ -148,32 +165,46 @@ trabajo.
   superviviente, no páginas.
 
 **Al clasificar, pasar la configuración — no decidir la modalidad a mano.**
-`li.clasificar(CFG)` / `ij.clasificar(CFG)` / `mf.filtrar(idsConocidos, desde, CFG)`
-reciben `config/filtros` (bastan `buscar_remoto`/`buscar_hibrido`/`buscar_presencial`)
-y son ellas las que deciden qué modalidades entran — sin ese argumento se
-comportan como sólo remoto. `local` (zonas de `areas_locales`) entra siempre,
-al margen de esos tres campos.
+`linkedin.clasificar(cfg=CFG)` / `infojobs.clasificar(cfg=CFG)` /
+`manfred.filtrar(ids_conocidos, desde, cfg=CFG)` reciben `config/filtros`
+(bastan `buscar_remoto`/`buscar_hibrido`/`buscar_presencial`) y son ellas las
+que deciden qué modalidades entran — sin ese argumento se comportan como sólo
+remoto. `local` (zonas de `areas_locales`) entra siempre, al margen de esos
+tres campos.
 
 Notas por fuente:
 
 - **LinkedIn**: `f_TPR=r86400&f_WT=2` (24 h, remoto) más búsquedas por las
-  zonas locales sin `f_WT`. El endpoint de invitado
-  (`jobs-guest/jobs/api/seeMoreJobPostings/search`) no se puede parsear con
-  `DOMParser` desde `linkedin.com`; partir por `<li>` y sacar campos con regex
-  sobre `data-entity-urn="urn:li:jobPosting:`. **La etiqueta «remoto» de
-  LinkedIn miente a menudo**: la modalidad se decide con la frase literal de la
-  descripción, no con la etiqueta del listado; si el listado la marca remota y
-  la descripción no la contradice, entra como *remoto sin confirmar*.
-- **InfoJobs**: `teleworkingIds=2&sinceDate=_7_DAYS`. El HTML crudo lleva las
-  URLs `of-i<hash>` por regex aunque el listado SSR sólo muestre unas pocas.
-  Empresa en `<meta name="description">`; sobre texto plano: `Bruto/año`,
-  `Al menos N años`, `Solo teletrabajo`, `Hace Nd`. Muro de cookies: «Rechazar
-  y cerrar», nunca «Aceptar».
+  zonas locales sin `f_WT`, contra el endpoint de invitado
+  (`jobs-guest/jobs/api/seeMoreJobPostings/search`), vía
+  `ScraplingServer.fetch` (`real_chrome:true, disable_resources:true`). Partir
+  el HTML por `<li>` y sacar campos con regex sobre
+  `data-entity-urn="urn:li:jobPosting:` (`pipeline/fuentes/linkedin.py:parsear`).
+  **La etiqueta «remoto» de LinkedIn miente a menudo**: la modalidad se decide
+  con la frase literal de la descripción, no con la etiqueta del listado; si
+  el listado la marca remota y la descripción no la contradice, entra como
+  *remoto sin confirmar*.
+- **InfoJobs**: `teleworkingIds=2&sinceDate=_7_DAYS`. Listado vía
+  `ScraplingServer.fetch` con `extraction_type:"markdown", main_content_only:true`
+  (el HTML crudo son 1,5M de caracteres; en markdown, ~50K, y las URLs
+  `of-i<hash>` se siguen extrayendo igual por regex). **Ficha vía
+  `ScraplingServer.stealthy_fetch`** (`real_chrome:true, solve_cloudflare:true,
+  network_idle:true, wait:1500`) — un `fetch` normal en la ficha devuelve un
+  captcha GeeTest (HTTP 405), comprobado el 21-sep-2026; el listado sí admite
+  `fetch` normal, sólo la ficha necesita el stealthy. Empresa en
+  `<meta name="description">`; sobre texto plano: `Bruto/año`,
+  `Al menos N años`, `Solo teletrabajo`, `Hace Nd`. El recorte de la
+  descripción (`infojobs.py:descripcion()`) sigue siendo necesario: el texto
+  completo de la página contiene «infojobs.net» en el pie, y un contador de
+  tecnologías sin recortar lo confunde con menciones a .NET en todas las
+  ofertas.
 - **Tecnoempleo**: por WebFetch el parámetro `keywords=` se ignora; verificar
   la fecha en la ficha, no en el listado.
 - **Indeed**: MCP `search_jobs`/`get_job_details` (fecha absoluta de
   publicación). Devuelve mucha oferta antigua: filtrar por fecha con dureza.
-- **Manfred**: API JSON pública. El listado ya trae salario y
+- **Manfred**: API JSON pública vía `ScraplingServer.make_request` — sin
+  navegador, y **siempre con `extraction_type:"text"`** (ver «Antes de nada»:
+  el `"markdown"` por defecto rompe el JSON). El listado ya trae salario y
   `remotePercentage` estructurados; la ficha, técnicas exigidas con nivel y
   sección. Obliga a publicar salario. Priorizarla.
 - **Himalayas** (lunes): los «X hours ago» son de re-rastreo, no de
@@ -205,11 +236,11 @@ que mejor encaje, con `alerta` pidiendo empresa final y país, y descartar el
 resto del clon.
 
 **Modalidad y `ambitos` no pasan por `filtrar.py`, a propósito.** La modalidad
-ya se decidió en el navegador con la configuración real (Pasos 2-4); repetirla
-en Python sería redundante. `ambitos` necesita que alguien lea la frase de
-`R.ambito()` — la misma forma gramatical vale para una restricción o para una
-apertura, y decidirlo a ciegas es inventar un criterio (ver
-`pipeline/vocabulario.md`).
+ya se decidió al extraer y clasificar la ficha con la configuración real
+(Pasos 2-4); repetirla en Python sería redundante. `ambitos` necesita que
+alguien lea la frase de `comun.ambito()` — la misma forma gramatical vale para
+una restricción o para una apertura, y decidirlo a ciegas es inventar un
+criterio (ver `pipeline/vocabulario.md`).
 
 **Los años de experiencia no son motivo de descarte aquí.** Se anotan en
 `anios_min` (Paso 6) y la oferta entra igual; la comparación con el CV la hace
@@ -245,13 +276,16 @@ titular y resumen; sin `carta` ni `skills_extra`).
   `general` (esta última para ofertas abiertas o generalistas que no encajen
   en las otras siete). Decide qué bullets y qué variante de skills salen en
   el CV.
-- `reqs`, por fuente: **Manfred** trae `o.reqs` ya en el formato exacto
-  (`[clave, peso, etiqueta]`) — copiarlo tal cual. **LinkedIn/InfoJobs**:
-  primero `li.snippets(id)`/`ij.snippets(hash)` (términos con más apariciones
-  y un fragmento de dónde aparece cada uno, para poner peso y etiqueta); sólo
-  si sale corta, vacía o rara, leer la ficha entera con
-  `li.leer()`/`ij.leer()`. **Tecnoempleo/Indeed y semanales**: sin atajo, leer
-  lo que devuelva el subagente. Usar el vocabulario de
+- `reqs`, por fuente: **Manfred** trae `oferta["reqs"]` ya en el formato
+  exacto (`[clave, peso, etiqueta]`, ver `manfred.py:detallar_una`) — copiarlo
+  tal cual. **LinkedIn/InfoJobs**: primero
+  `python pipeline/fuentes/linkedin.py snippets --in ... --id <id>` /
+  `python pipeline/fuentes/infojobs.py snippets --in ... --hash <hash>`
+  (términos con más apariciones y un fragmento de dónde aparece cada uno, para
+  poner peso y etiqueta); sólo si sale corta, vacía o rara, leer la ficha
+  entera con el subcomando `leer` de esos mismos scripts. **Tecnoempleo/Indeed
+  y semanales**: sin atajo, leer lo que devuelva el subagente. Usar el
+  vocabulario de
   `pipeline/vocabulario.md` y mirar ofertas parecidas ya existentes para que
   la puntuación sea comparable.
 - El salario, cuando la oferta no lo publica, sale de `pipeline/bandas.json`
@@ -330,9 +364,10 @@ el agente:
    }
    ```
 
-   `fichas_completas_leidas` cuenta sólo las veces que hizo falta
-   `li.leer()`/`ij.leer()`/leer la ficha entera (el atajo de `snippets()` no
-   cuenta). `tokens_estimados` es una estimación a ojo del gasto de la
+   `fichas_completas_leidas` cuenta sólo las veces que hizo falta el
+   subcomando `leer` de `linkedin.py`/`infojobs.py` (leer la ficha entera; el
+   atajo de `snippets` no cuenta). `tokens_estimados` es una estimación a ojo
+   del gasto de la
    ejecución, o `null` si no se tiene ni idea — mejor sin cifra que una
    inventada.
 
@@ -348,8 +383,8 @@ esto todavía.
 
 ## Paso 8 — Resumen del día
 
-En pocas líneas: qué ventana se ha cubierto, con qué navegador se ha
-trabajado y qué fuentes se han podido consultar y cuáles no (y por qué),
+En pocas líneas: qué ventana se ha cubierto, si `ScraplingServer` ha estado
+disponible y qué fuentes se han podido consultar y cuáles no (y por qué),
 cuántas ofertas nuevas han entrado, cuáles son las mejores y por qué, cuántas
 se han podado por antigüedad, qué novedades ha traído el correo, si hay
 alguna entrevista que convenga meter en el calendario (proponerla, no
@@ -367,10 +402,11 @@ decirlo aquí y que decida Íñigo — la tarea nunca lo cambia por su cuenta.
 - Sin shell o sin la herramienta Artifact: volcar la cosecha del día en
   `radar_<fecha>_ofertas_nuevas.json` con las ofertas sin deduplicar y una lista
   de pendientes. La siguiente ejecución sana lo ingiere.
-- Ordenador apagado o sin la app de escritorio: no pasa nada. Cubrir lo que no
-  necesite navegador, decir qué se ha quedado sin cubrir y **no escribir
-  `config/estado_tarea`**, para que la ventana se ensanche sola al día
-  siguiente.
+- Ordenador apagado, sin la app de escritorio, o `ScraplingServer` sin
+  responder: no pasa nada. Cubrir lo que no lo necesite
+  (Tecnoempleo/Indeed/semanales), decir qué se ha quedado sin cubrir y **no
+  escribir `config/estado_tarea`**, para que la ventana se ensanche sola al
+  día siguiente.
 - «GitHub access to this repository is not enabled»: el repo ha dejado de ser
   público. Sin eso la tarea no puede funcionar.
 - Si se ha tocado código del repo durante la ejecución (poco habitual): commit

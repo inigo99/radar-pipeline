@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Instalar dependencias de Node (jsdom para paridad, terser para el bundle)
+      - name: Instalar dependencias de Node (jsdom para paridad.mjs)
         run: npm install
       - name: Deduplicación (dedupe.py)
         run: python tests/test_dedupe.py
@@ -28,5 +28,7 @@ jobs:
         run: python tests/test_lint.py
       - name: Instrumentación de coste por ejecución (estadisticas.py)
         run: python tests/test_estadisticas.py
+      - name: Extractores de fuentes (pipeline/fuentes/)
+        run: python tests/test_fuentes.py
       - name: Pipeline completo sobre la fixture sintética
         run: python tests/smoke.py

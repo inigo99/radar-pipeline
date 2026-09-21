@@ -20,7 +20,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Instalar jsdom (para el test de paridad)
-        run: npm install jsdom --no-save
+      - name: Instalar dependencias de Node (jsdom para paridad, terser para el bundle)
+        run: npm install
+      - name: Deduplicación (dedupe.py)
+        run: python tests/test_dedupe.py
+      - name: Linter del CV (lint.py)
+        run: python tests/test_lint.py
+      - name: Instrumentación de coste por ejecución (estadisticas.py)
+        run: python tests/test_estadisticas.py
       - name: Pipeline completo sobre la fixture sintética
         run: python tests/smoke.py

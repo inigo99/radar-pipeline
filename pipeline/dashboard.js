@@ -2091,7 +2091,15 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
   clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),3200); }
 
 const MOT_CLS={salario:'p-mot-salario',modalidad:'p-mot-modalidad',ambito:'p-mot-ambito',experiencia:'p-mot-experiencia',duplicada:'p-mot-duplicada'};
-const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experiencia:'Experiencia',duplicada:'Duplicada',podada:'Podada',otro:'Otro',/* los motivos que escribe pipeline/filtrar.py, tal cual los escribe */'empresa excluida':'Empresa excluida','palabra excluida':'Palabra excluida','salario por debajo del mínimo':'Salario','sin salario publicado':'Sin salario'};
+const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experiencia:'Experiencia',duplicada:'Duplicada',podada:'Podada',otro:'Otro',/* los motivos que escribe pipeline/filtrar.py, tal cual los escribe */'empresa excluida':'Empresa excluida','palabra excluida':'Palabra excluida'};
+/* Distintas versiones del pipeline han escrito el mismo descarte por salario
+   con claves distintas ("salario", "salario por debajo del mínimo",
+   "salario_bajo_minimo", "sin salario publicado"): sin normalizar, "Salario"
+   salía repetido varias veces en los recuentos de «Filtradas» como si fueran
+   motivos distintos (23 sep 2026, encontrado por Íñigo). Se agrupan aquí bajo
+   una sola clave antes de contar. */
+const MOTIVO_CANON={'salario por debajo del mínimo':'salario','salario_bajo_minimo':'salario','sin salario publicado':'salario'};
+const motivoCanon = m => MOTIVO_CANON[m] || m;
 
 /* Lo que el filtro aparta. Existe porque un descarte silencioso no se puede
    discutir: si el mínimo de salario o los años están mal puestos, aquí se ve.
@@ -2100,13 +2108,16 @@ const MOT_ES={salario:'Salario',modalidad:'Modalidad',ambito:'Ámbito',experienc
        tienen ficha ni puntuación;
      - las apartadas POR AÑOS siguen en `ofertas` con todo: sólo se las quita de
        la cola, y vuelven en cuanto se toca el margen en «Configuración». */
+/* Sólo se lista aquí lo que se te escapa «por poco» (dentro del margen): lo
+   que queda «lejos» sigue apartándose de la cola igual que siempre, pero ya
+   no se enseña en esta pestaña — pedido por Íñigo el 23 sep 2026, para no
+   llenar «Filtradas» de ofertas que no vale la pena revisar una a una. */
 function tablaExperiencia(){
-  const filas = apartadas().sort((a,b)=>a.aniosMin-b.aniosMin || b.foco-a.foco);
+  const filas = apartadas().filter(r=>ajusteExp(r)!=='lejos').sort((a,b)=>a.aniosMin-b.aniosMin || b.foco-a.foco);
   if(!filas.length) return '';
-  const justo = filas.filter(r=>ajusteExp(r)==='justo').length;
   const m = margenExp();
-  return `<h4>Apartadas por años de experiencia (${filas.length})</h4>
-    <p class="lede" style="margin-bottom:12px">Tu CV suma <b>${aniosMios()} años</b> y estas piden más, así que salen de la cola. ${justo} se te escapan «por poco» —dentro de tu margen de ${m} ${m===1?'año':'años'}—: si una de ésas te interesa de verdad, el camino es el correo directo nombrando el hueco, porque por el formulario filtra la máquina. <b>No se ha borrado ninguna</b>: siguen con su ficha entera, y suben tus años en «Configuración» (o pasa el tiempo, que se recalculan del CV) y vuelven solas a la cola.</p>
+  return `<h4>Apartadas por años de experiencia, por poco (${filas.length})</h4>
+    <p class="lede" style="margin-bottom:12px">Tu CV suma <b>${aniosMios()} años</b> y estas piden más, pero dentro de tu margen de ${m} ${m===1?'año':'años'}, así que salen de la cola pero se defienden por correo directo nombrando el hueco (por el formulario filtra la máquina). Las que piden bastantes más años no se enseñan aquí. <b>No se ha borrado ninguna</b>: siguen con su ficha entera, y suben tus años en «Configuración» (o pasa el tiempo, que se recalculan del CV) y vuelven solas a la cola.</p>
     <table class="ptab">
       <thead><tr><th>Empresa</th><th>Puesto</th><th class="num">Pide</th><th>Distancia</th><th>Familia</th><th class="num">Salario</th><th></th></tr></thead>
       <tbody>${filas.map(r=>`<tr>
@@ -2122,26 +2133,17 @@ function tablaExperiencia(){
     </table>`;
 }
 
+/* Sólo la métrica, sin listar oferta a oferta — pedido por Íñigo el 23 sep
+   2026: estas ni siquiera tienen ficha, así que una tabla fila por fila no
+   aportaba nada que el resumen no dijera ya. */
 function tablaIngesta(){
   if(!FILTRADAS.length) return '';
   const porMotivo={};
-  FILTRADAS.forEach(f=>{ porMotivo[f.motivo||'otro']=(porMotivo[f.motivo||'otro']||0)+1; });
+  FILTRADAS.forEach(f=>{ const m=motivoCanon(f.motivo||'otro'); porMotivo[m]=(porMotivo[m]||0)+1; });
   const resumen=Object.entries(porMotivo).sort((a,b)=>b[1]-a[1])
     .map(([m,n])=>`${n} por ${(MOT_ES[m]||m).toLowerCase()}`).join(', ');
   return `<h4>Apartadas al entrar (${FILTRADAS.length})</h4>
-    <p class="lede" style="margin-bottom:12px">${esc(resumen)}. Éstas no llegaron al radar: el filtro las paró al buscarlas, así que no tienen ficha ni puntuación. Si ves aquí demasiadas cosas buenas, baja el mínimo de salario o afloja <em>solo remoto</em>.</p>
-    <table class="ptab">
-      <thead><tr><th>Empresa</th><th>Puesto</th><th>Motivo</th><th>Por qué</th><th>Fuente</th><th>Fecha</th><th></th></tr></thead>
-      <tbody>${FILTRADAS.map(f=>`<tr>
-        <td><b>${esc(f.empresa||'—')}</b></td>
-        <td class="pt">${esc(f.puesto||'—')}</td>
-        <td><span class="pill ${MOT_CLS[f.motivo]||'p-mot-otro'}">${esc(MOT_ES[f.motivo]||f.motivo||'Otro')}</span></td>
-        <td class="motivo">${esc(f.detalle||'')}</td>
-        <td class="pt">${esc(f.fuente||'—')}</td>
-        <td class="num pt">${esc(f.fecha||'—')}</td>
-        <td>${f.url?`<a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">Ver</a>`:''}</td>
-      </tr>`).join('')}</tbody>
-    </table>`;
+    <p class="lede" style="margin-bottom:12px">${esc(resumen)}. Éstas no llegaron al radar: el filtro las paró al buscarlas, así que no tienen ficha ni puntuación. Si ves aquí demasiadas cosas buenas, baja el mínimo de salario o afloja <em>solo remoto</em>.</p>`;
 }
 
 function renderFiltradas(){
@@ -2178,7 +2180,7 @@ function recuentoDescartes(){
   const total = DATA.length + FILTRADAS.length;      // todo lo que llegó a mirarse
   if(!total) return '';
   const porMotivo={};
-  FILTRADAS.forEach(f=>{ const m=f.motivo||'otro'; porMotivo[m]=(porMotivo[m]||0)+1; });
+  FILTRADAS.forEach(f=>{ const m=motivoCanon(f.motivo||'otro'); porMotivo[m]=(porMotivo[m]||0)+1; });
   if(exp) porMotivo.experiencia=(porMotivo.experiencia||0)+exp;
 
   const pct = n => total ? Math.round(1000*n/total)/10 : 0;
@@ -2187,7 +2189,7 @@ function recuentoDescartes(){
   if(!tiles) return '';
 
   const formas={};
-  FILTRADAS.forEach(f=>{ const k=formaMotivo(f.detalle||MOT_ES[f.motivo]||'otro');
+  FILTRADAS.forEach(f=>{ const k=formaMotivo(f.detalle||MOT_ES[motivoCanon(f.motivo)]||'otro');
                          formas[k]=(formas[k]||0)+1; });
   const orden=Object.entries(formas).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const mayor=orden.length?orden[0][1]:1;

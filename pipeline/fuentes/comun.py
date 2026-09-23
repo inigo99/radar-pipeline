@@ -67,7 +67,17 @@ RE_HIBRIDO = re.compile(
     r"d[ií]as? (de )?presencialidad|modelo h[ií]brido|parcialmente remot|"
     r"remoto parcial|combinaci[oó]n de (teletrabajo|remoto)|"
     r"flexib\w* .{0,25}remot|some days? (a week )?(in|at) (the )?office|"
-    r"office[- ]based .{0,25}(flexib|remot))"
+    r"office[- ]based .{0,25}(flexib|remot)|"
+    # 23-sep-2026: «work from home (2 days per week)» / «remote 3 days a
+    # week» se colaban como 100% remoto -> RE_REMOTO capta «work from home»
+    # o «remote» sueltos y nada exigía "office" cerca. Es el mismo patrón que
+    # arriba pero en la forma inversa: cuántos días trabaja desde CASA, no
+    # cuántos días va a la oficina. Encontrado con una oferta real de Smadex.
+    # OJO: el número se limita a 1-4 a propósito — «remote 5 days a week» es
+    # 100% remoto (semana completa), no híbrido; sólo <5 implica que el
+    # resto de días son de oficina.
+    r"(work(ing)? from home|remote(ly)?)[^.]{0,40}[1-4]\s*days?\s*(a|per)\s*week|"
+    r"[1-4]\s*days?\s*(a|per)\s*week[^.]{0,40}(work(ing)? from home|remote(ly)?))"
 )
 RE_PRESENCIAL = re.compile(
     r"(presencial|on-?site|onsite|in-?person|en la oficina|nuestras? oficinas?|"

@@ -68,6 +68,28 @@ def test_modalidad_local_gana_a_hibrido_pero_no_a_remoto():
     assert r_rem["tipo"] == "remoto"  # remoto puro nunca se rebaja a local
 
 
+def test_modalidad_work_from_home_n_dias_es_hibrido():
+    """23-sep-2026: oferta real de Smadex (Data Scientist, Barcelona,
+    li-4461143360) que en LinkedIn se ve con la etiqueta «Híbrido» pero cuya
+    descripción sólo dice «work from home (2 days per week)». RE_REMOTO
+    captaba «work from home» suelto y no había ningún patrón de RE_HIBRIDO
+    para "días desde casa" en inglés (sólo para "días en la oficina"), así
+    que salía clasificada como 100% remoto."""
+    d = comun.norm(
+        "Great work-life balance: work from home (2 days per week), flexible hours."
+    )
+    r = comun.modalidad(d, "", False)
+    assert r["tipo"] == "hibrido"
+
+
+def test_modalidad_remote_5_dias_semana_sigue_siendo_remoto():
+    """El número de días se limita a 1-4 a propósito: "remote 5 days a
+    week" es una semana completa en remoto, no híbrido."""
+    d = comun.norm("This is a remote position, work remotely 5 days a week.")
+    r = comun.modalidad(d, "", False)
+    assert r["tipo"] == "remoto"
+
+
 def test_titulo_vale_incluye_y_excluye():
     assert comun.titulo_vale("Senior Machine Learning Engineer")
     assert comun.titulo_vale("Data Scientist")

@@ -182,13 +182,13 @@ cargada vía CDP. Eso cambia lo que aplica:
   petición — comprobado con datos reales el 21-sep-2026, no en teoría:
   - **LinkedIn** (listado y ficha): `fetch` normal con `real_chrome:true,
     disable_resources:true` basta, sin login (endpoints de invitado).
-  - **InfoJobs listado**: `fetch` normal también, pero con
-    `extraction_type:"markdown", main_content_only:true` — el HTML crudo son
-    1,5M de caracteres, en markdown ~50K, y las URLs `of-i<hash>` se
-    extraen igual.
-  - **InfoJobs ficha**: `fetch` normal devuelve un captcha GeeTest (HTTP 405).
-    Hace falta `stealthy_fetch` con `real_chrome:true, solve_cloudflare:true,
-    network_idle:true, wait:1500`.
+  - **InfoJobs (listado y ficha)**: `fetch` normal devuelve un captcha
+    GeeTest (HTTP 405) — en la ficha desde el 21-sep-2026, y en el listado
+    también desde el 27-sep-2026. Hace falta `stealthy_fetch` con
+    `real_chrome:true, solve_cloudflare:true, network_idle:true, wait:1500`.
+    En el listado, además `extraction_type:"markdown", main_content_only:true`
+    — el HTML crudo son 1,5M de caracteres, en markdown ~50K, y las URLs
+    `of-i<hash>` se extraen igual.
   - **Manfred** (listado y ficha): `make_request` puro (ni siquiera
     navegador, es JSON) — pero **con `extraction_type:"text"`, nunca
     `"markdown"`**: el extractor markdown escapa los guiones bajos dentro de

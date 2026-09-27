@@ -48,16 +48,16 @@ dashboard).
   `pipeline/fuentes/`):
   - **LinkedIn (listado y ficha):** `fetch` con `real_chrome:true,
     disable_resources:true`. Endpoints de invitado, sin login.
-  - **InfoJobs (listado):** `fetch` con `real_chrome:true,
-    disable_resources:true` también vale, pero pedir además
-    `extraction_type:"markdown", main_content_only:true` (o un `css_selector`
-    más estrecho): el HTML crudo de esa página son 1,5M de caracteres y sólo
-    hace falta lo que lleva las URLs `of-i<hash>`.
-  - **InfoJobs (ficha): `stealthy_fetch`, no `fetch`.** Con
+  - **InfoJobs (listado y ficha): `stealthy_fetch`, no `fetch`.** Con
     `real_chrome:true, solve_cloudflare:true, network_idle:true, wait:1500`.
-    Un `fetch` normal en la ficha devuelve un captcha GeeTest (HTTP 405,
-    «¿Eres humano o un robot?»), aunque el listado sí admita `fetch` normal —
-    no lo intentes con `fetch` primero para ahorrar, ya se sabe que falla.
+    Un `fetch` normal devuelve un captcha GeeTest (HTTP 405, «¿Eres humano o
+    un robot?») en la ficha desde el 21-sep-2026 y **también en el listado
+    desde el 27-sep-2026** — no lo intentes con `fetch` primero para ahorrar,
+    ya se sabe que falla. En el listado, pedir además
+    `extraction_type:"markdown", main_content_only:true`: el HTML crudo son
+    1,5M de caracteres y sólo hace falta lo que lleva las URLs `of-i<hash>`
+    (en markdown siguen apareciendo como `//www.infojobs.net/.../of-i<hash>`,
+    comprobado el 27-sep).
   - **Manfred (listado y ficha):** `make_request` — es una API JSON pública,
     no hace falta navegador en absoluto. **Pedir siempre
     `extraction_type:"text"`, nunca el `"markdown"` por defecto**: el
@@ -185,13 +185,14 @@ Notas por fuente:
   el listado la marca remota y la descripción no la contradice, entra como
   *remoto sin confirmar*.
 - **InfoJobs**: `teleworkingIds=2&sinceDate=_7_DAYS`. Listado vía
-  `ScraplingServer.fetch` con `extraction_type:"markdown", main_content_only:true`
+  `ScraplingServer.stealthy_fetch` (mismos parámetros que la ficha, más
+  `extraction_type:"markdown", main_content_only:true`)
   (el HTML crudo son 1,5M de caracteres; en markdown, ~50K, y las URLs
   `of-i<hash>` se siguen extrayendo igual por regex). **Ficha vía
   `ScraplingServer.stealthy_fetch`** (`real_chrome:true, solve_cloudflare:true,
   network_idle:true, wait:1500`) — un `fetch` normal en la ficha devuelve un
-  captcha GeeTest (HTTP 405), comprobado el 21-sep-2026; el listado sí admite
-  `fetch` normal, sólo la ficha necesita el stealthy. Empresa en
+  captcha GeeTest (HTTP 405), comprobado el 21-sep-2026 en la ficha y el
+  27-sep-2026 también en el listado. Empresa en
   `<meta name="description">`; sobre texto plano: `Bruto/año`,
   `Al menos N años`, `Solo teletrabajo`, `Hace Nd`. El recorte de la
   descripción (`infojobs.py:descripcion()`) sigue siendo necesario: el texto

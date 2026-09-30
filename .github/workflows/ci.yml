@@ -30,5 +30,7 @@ jobs:
         run: python tests/test_estadisticas.py
       - name: Extractores de fuentes (pipeline/fuentes/)
         run: python tests/test_fuentes.py
+      - name: Coste por fase de la transcripción (coste_fases.py)
+        run: python tests/test_coste_fases.py
       - name: Pipeline completo sobre la fixture sintética
         run: python tests/smoke.py

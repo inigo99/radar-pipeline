@@ -1,6 +1,10 @@
 # radar-pipeline
 
-THIS IS MY PERSONAL VERSION OF JOBRADAR, FOR MY PERSONAL USE.
+> **¿Buscas la herramienta?** Es **[jobradar](https://github.com/inigo99/jobradar)**
+> ([`pip install jobradar-cv`](https://pypi.org/project/jobradar-cv/)): la versión
+> general, documentada y con tests, para cualquier profesión.
+> Este repo es el motor de mi búsqueda personal (sus mejoras se portan a jobradar).
+> Lo ejecuta una tarea diaria, y este README son sus notas de ingeniería.
 
 Motor del **Radar de ofertas**: puntúa ofertas de empleo contra un CV real y construye
 el dashboard desde el que se trabajan.

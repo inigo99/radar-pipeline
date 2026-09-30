@@ -77,7 +77,22 @@ RE_HIBRIDO = re.compile(
     # 100% remoto (semana completa), no híbrido; sólo <5 implica que el
     # resto de días son de oficina.
     r"(work(ing)? from home|remote(ly)?)[^.]{0,40}[1-4]\s*days?\s*(a|per)\s*week|"
-    r"[1-4]\s*days?\s*(a|per)\s*week[^.]{0,40}(work(ing)? from home|remote(ly)?))"
+    r"[1-4]\s*days?\s*(a|per)\s*week[^.]{0,40}(work(ing)? from home|remote(ly)?)|"
+    # 30-sep-2026: revisión de las 41 descartadas a mano por «Presencial»/
+    # «Híbrido». Formas reales de decir «remoto sólo una parte» que se
+    # colaban como 100 % remoto porque llevan la palabra remote/remoto:
+    #  - «Remote work: 1 full day and 2 afternoons per week» (Ventós)
+    r"(remote work|work(ing)? from home|teletrabajo|en remoto)[^.]{0,20}\b[1-4]\s*(full\s*)?"
+    r"(days?|dias?)\b[^.]{0,40}(week|semana)|"
+    #  - «Office-first ... with 20% remote flexibility» (Joppy), «Hasta un
+    #    60% de trabajo en remoto» (CaixaBank). Un porcentaje de 1 a 99: el
+    #    \b impide que «100%» case como «10%» o «00%».
+    r"office[- ]first|remote flexibility|\b[1-9]\d?\s*%[^.]{0,20}(remote|remot|teletrabajo)|"
+    #  - «work from home, the office or a mix of both. Plus, work from
+    #    anywhere for up to 30 days a year» (Prima): días al año desde
+    #    cualquier sitio sólo tienen sentido si el resto es desde la oficina.
+    r"mix of both|work(ing)? from anywhere (for )?(up to )?\d+ (days|weeks)|"
+    r"\d+ (days|weeks) (a|per) year (from anywhere|of remote|remote))"
 )
 RE_PRESENCIAL = re.compile(
     r"(presencial|on-?site|onsite|in-?person|en la oficina|nuestras? oficinas?|"
@@ -85,16 +100,53 @@ RE_PRESENCIAL = re.compile(
     r"no (se admite|se permite|admite|permite) (el )?teletrabajo|"
     r"sin (opcion|opción) de teletrabajo|acudir a (la )?oficina|"
     r"asistencia (a|diaria) (la )?oficina|desde (la|nuestra) oficina|"
-    r"from (our|the) office|based in (our|the) office|office[- ]based role\b)"
+    r"from (our|the) office|based in (our|the) office|office[- ]based role\b|"
+    # 30-sep-2026 (Harbour.Space): «Open to relocating to Barcelona» = hay
+    # que vivir allí. «Relocation package» a secas NO: muchas remotas lo
+    # ofrecen como opción.
+    r"(open|willing|able) to relocat\w* to|must relocate|relocat\w* to (barcelona|madrid|valencia|"
+    r"bilbao|sevilla|malaga|london|lisbon|berlin|paris|amsterdam|dublin))"
+)
+# Menciones de «presencial» que no son la modalidad del puesto: una reunión o
+# un evento presencial de vez en cuando cabe en un 100 % remoto. Se quitan del
+# texto antes de buscar RE_PRESENCIAL.
+RE_PRESENCIAL_OCASIONAL = re.compile(
+    r"((reunion|encuentro|evento|visita|jornada|quedada|formacion)(es|s)?( \w+){0,2} presencial(es)?|"
+    r"presencial(es)? (opcional|puntual|ocasional)(es)?)"
 )
 RE_LOCAL = re.compile(
     r"(navarr|pamplona|iruña|gipuzkoa|guipuzcoa|san sebasti|donostia|irun|"
     r"tudela|mutilva|noain|estella|zarautz|tolosa)"
 )
+# 30-sep-2026: el endpoint de invitado de LinkedIn IGNORA `f_WT` (comprobado:
+# f_WT=1, 2, 3 y sin f_WT devuelven exactamente las mismas ofertas, en el
+# endpoint `seeMoreJobPostings` y en `/jobs/search`). Así que «salió en la
+# búsqueda de remoto» no significa nada. Lo único del listado que sí apunta a
+# remoto es una ubicación a nivel de país o región: las remotas de verdad se
+# publican casi siempre como «Spain»/«España»/«European Union»/«EMEA», y las
+# de oficina con la ciudad. De las 22 que Íñigo descartó a mano por
+# presencial/híbrido tras entrar como «remoto sin confirmar», ninguna tenía
+# ubicación a nivel país.
+RE_UBICACION_PAIS = re.compile(
+    r"^\s*(spain|espana|european union|union europea|european economic area|"
+    r"espacio economico europeo|emea|europe|europa|eu|ue|worldwide|remote|remoto)\s*$"
+)
+
+
+def ubicacion_nivel_pais(ubicacion_norm):
+    """¿La ubicación del listado es un país/región entero y no una ciudad?
+    Se quita lo que vaya entre paréntesis («España (remoto)»)."""
+    u = re.sub(r"\(.*?\)", " ", ubicacion_norm or "")
+    return bool(RE_UBICACION_PAIS.match(u))
+
+
 RE_NO_REMOTO = re.compile(
     r"(not remote|no remote|not a remote|no es (un puesto )?remoto|"
     r"no (se admite|se permite|admite|permite) (el )?teletrabajo|"
-    r"sin (opcion|opción) de teletrabajo)"
+    r"sin (opcion|opción) de teletrabajo|"
+    # 30-sep-2026 (Harbour.Space): «Not a fit if: you're looking for a
+    # remote role».
+    r"not a fit if[^.]{0,60}remote|(isn'?t|is not|not) (a )?(fully )?remote (role|position|job))"
 )
 
 _RE_MODALIDAD_JUNTO = re.compile(
@@ -132,7 +184,7 @@ def modalidad(texto_norm, ubicacion_norm, etiqueta_remoto):
     frases = frases_modalidad(texto_norm, 4)
     rem = bool(RE_REMOTO.search(texto_norm))
     hib = bool(RE_HIBRIDO.search(texto_norm))
-    pre = bool(RE_PRESENCIAL.search(texto_norm))
+    pre = bool(RE_PRESENCIAL.search(RE_PRESENCIAL_OCASIONAL.sub(" ", texto_norm)))
     negacion = bool(RE_NO_REMOTO.search(texto_norm))
     if negacion and not hib:
         tipo = "presencial"

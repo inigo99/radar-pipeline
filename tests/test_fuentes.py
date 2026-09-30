@@ -252,6 +252,59 @@ def test_manfred_filtrar_por_modalidad_y_titulo():
     assert "acme-onsite-de" not in slugs    # presencial, no aceptado por defecto
 
 
+# ---- 30-sep-2026: revisión de las 41 descartadas a mano por modalidad ----
+# Frases reales (recortadas) de fichas de LinkedIn que entraron como remotas y
+# Íñigo descartó como «Presencial»/«Híbrido».
+
+def _tipo(txt, ubi=""):
+    return comun.modalidad(comun.norm(txt), comun.norm(ubi), False)["tipo"]
+
+
+def test_modalidad_remote_work_n_dias_semana_es_hibrido():
+    # Ventós (li-4471898699)
+    assert _tipo("Benefits: Remote work: 1 full day and 2 afternoons per week. Flexible hours.") == "hibrido"
+
+
+def test_modalidad_office_first_y_porcentaje_remoto_es_hibrido():
+    # Joppy (li-4469446490) y CaixaBank Tech (li-4460068327)
+    assert _tipo("Office-first in Barcelona & Madrid, with 20% remote flexibility.") == "hibrido"
+    assert _tipo("Hasta un 60% de trabajo en remoto dependiendo del proyecto.") == "hibrido"
+    # ...pero 100 % no es un porcentaje parcial
+    assert _tipo("Trabajo 100% en remoto desde cualquier punto de España.") == "remoto"
+
+
+def test_modalidad_mix_y_dias_al_anio_desde_cualquier_sitio_es_hibrido():
+    # Prima (li-4435540880)
+    assert _tipo("Enjoy full flexibility - work from home, the office or a mix of both. "
+                 "Plus, work from anywhere for up to 30 days a year.") == "hibrido"
+
+
+def test_modalidad_not_a_fit_remote_y_relocation_no_es_remoto():
+    # Harbour.Space (li-4470436016)
+    t = _tipo("Open to relocating to Barcelona. Not a fit if: you're looking for a remote role.")
+    assert t == "presencial"
+
+
+def test_modalidad_reunion_presencial_ocasional_no_rompe_el_remoto():
+    assert _tipo("Trabajo 100 % en remoto, con una reunión presencial al trimestre opcional.") == "remoto"
+
+
+def test_linkedin_sin_frase_y_ubicacion_ciudad_queda_fuera():
+    """f_WT=2 no filtra nada en el endpoint de invitado: salir en la búsqueda
+    «R» no basta. Sin frase de modalidad, sólo una ubicación a nivel país
+    mantiene «remoto sin confirmar»; con ciudad queda `desconocida`."""
+    from pipeline.fuentes import linkedin
+    txt = "<p>Buscamos Data Scientist con Python y SQL.</p>"
+    ciudad = linkedin.detallar_una({"id": "1", "titulo": "DS", "empresa": "Acme", "fecha": "", "ubicacion": "Madrid, Community of Madrid, Spain", "q": "R|x"}, txt)
+    pais = linkedin.detallar_una({"id": "2", "titulo": "DS", "empresa": "Beta", "fecha": "", "ubicacion": "Spain", "q": "R|x"}, txt)
+    assert ciudad["modalidad"]["tipo"] == "desconocida"
+    assert pais["modalidad"]["tipo"] == "remoto_sin_confirmar"
+    res = linkedin.clasificar([ciudad, pais], {})
+    assert res["revisar"] == 1 and res["fuera"] == 1
+    a = res["apartadas"][0]
+    assert a["id"] == "li-1" and a["motivo"] == "modalidad" and a["url"].endswith("/1/")
+
+
 if __name__ == "__main__":
     import inspect
     mod = sys.modules[__name__]

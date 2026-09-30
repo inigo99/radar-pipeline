@@ -47,6 +47,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import estadisticas  # noqa: E402
+import coste_fases  # noqa: E402  (30-sep-2026: tiempo y tokens reales por fase)
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -62,9 +63,10 @@ def _duracion_min(inicio, fin):
         return None
 
 
-def construye(agente, contadores, fecha=None):
+def construye(agente, contadores, fecha=None, coste=None):
     """El documento completo que se sube a `historial/<fecha>`."""
     fecha = fecha or datetime.date.today().isoformat()
+    coste = coste or {}
     inicio = agente.get("inicio")
     fin = agente.get("fin")
     return {
@@ -76,6 +78,12 @@ def construye(agente, contadores, fecha=None):
         "fuentes_omitidas": agente.get("fuentes_omitidas") or [],
         "fichas_completas_leidas": agente.get("fichas_completas_leidas"),
         "tokens_estimados": agente.get("tokens_estimados"),
+        # Desde el 30-sep-2026, medidos de la transcripción de la sesión (ver
+        # coste_fases.py) en vez de a ojo. `tokens` = totales por tipo;
+        # `fases` = el mismo desglose por fase, con su duración.
+        "tokens": coste.get("total"),
+        "fases": coste.get("fases") or [],
+        "subagentes": coste.get("subagentes"),
         "correo_novedades": agente.get("correo_novedades"),
         "errores": agente.get("errores") or [],
         # Lo que se contó solo durante la ejecución (ver estadisticas.py):
@@ -96,7 +104,11 @@ def main(argv):
             agente = json.loads(crudo)
 
     contadores = estadisticas.leer()
-    documento = construye(agente, contadores)
+    try:
+        coste = coste_fases.calcula()
+    except Exception as e:  # la instrumentación nunca debe tumbar el cierre
+        coste = {"aviso": f"coste_fases falló: {type(e).__name__}: {e}"}
+    documento = construye(agente, contadores, coste=coste)
 
     destino = argv[argv.index("--out") + 1] if "--out" in argv else os.path.join(RAIZ, "out", "historial.json")
     os.makedirs(os.path.dirname(destino), exist_ok=True)
@@ -112,6 +124,10 @@ def main(argv):
         for f in documento["fuentes_omitidas"]:
             print(f"    · {f.get('fuente', '?')}: {f.get('motivo', '(sin motivo)')}")
     print(f"  contadores: {contadores}")
+    if coste.get("fases"):
+        coste_fases.imprime(coste)
+    else:
+        print(f"  coste por fase: {coste.get('aviso', 'sin marcas de fase.py')}")
     return 0
 
 

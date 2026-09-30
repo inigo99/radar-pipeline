@@ -285,6 +285,28 @@ quedársela: la oferta entra marcada como `remoto_sin_confirmar`, con una alerta
 para preguntarlo en el primer contacto. Un descarte silencioso no se puede
 auditar; una alerta, sí.
 
+**LinkedIn, desde el 30-sep-2026: el filtro de remoto no existe.** El endpoint
+de invitado ignora `f_WT` por completo (f_WT=1, 2, 3 y sin f_WT devuelven las
+mismas ofertas, también en `/jobs/search`), así que «salió en la búsqueda de
+remoto» no es ninguna etiqueta. 22 de las 41 ofertas que Íñigo descartó a mano
+por presencial/híbrido habían entrado así, sin una sola palabra de modalidad en
+la descripción. Ahora, en LinkedIn, `remoto_sin_confirmar` exige además que la
+ubicación del listado sea un país o región entera (`Spain`, `España`,
+`European Union`, `EMEA`…, ver `comun.ubicacion_nivel_pais`); con una ciudad y
+sin frase de modalidad queda `desconocida` y `linkedin.py clasificar` la anota
+en `data/filtradas.json` con `motivo: "modalidad"`, para que cuente en
+«Filtradas» en vez de desaparecer. InfoJobs y Manfred no cambian: sus filtros
+de teletrabajo sí son datos estructurados del portal.
+
+Las otras 19 eran remoto «de boquilla»: la descripción dice *remote* pero sólo
+para una parte («Remote work: 1 full day and 2 afternoons per week», «Office-first
+… with 20% remote flexibility», «work from anywhere for up to 30 days a year»,
+«Not a fit if you're looking for a remote role»). Los patrones están en
+`RE_HIBRIDO`/`RE_PRESENCIAL`/`RE_NO_REMOTO`, con un test por frase real en
+`tests/test_fuentes.py`. `RE_PRESENCIAL_OCASIONAL` quita «reunión presencial
+trimestral» y similares antes de buscar presencialidad, para no rebajar un
+100 % remoto por un evento suelto.
+
 ## Qué modalidades se buscan: `buscar_remoto`/`buscar_hibrido`/`buscar_presencial`
 
 Hasta el 16-sep-2026 esto era un único interruptor (`solo_remoto`) que, en la

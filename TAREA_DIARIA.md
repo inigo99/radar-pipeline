@@ -82,6 +82,30 @@ dashboard).
   pero sigue sin tener sentido ni estar permitido inscribirse en ofertas,
   enviar mensajes, guardar ofertas ni tocar ajustes de ningún portal.
 
+## Marcas de fase (tiempo y tokens por fase)
+
+Desde el 30-sep-2026, **al empezar cada fase** se ejecuta
+`python pipeline/fase.py <nombre>` (una línea, desde la raíz del repo; abre
+esa fase y cierra la anterior), y `python pipeline/fase.py fin` justo antes
+del Paso 7 de instrumentación. Nombres fijos, para que el historial se pueda
+comparar entre días:
+
+| Cuándo | `<nombre>` |
+|---|---|
+| Paso 0 | `config` |
+| Paso 0 bis | `correo` |
+| Paso 1 | `datos` |
+| Pasos 2-4, al empezar cada fuente del hilo principal | `linkedin` · `infojobs` · `manfred` |
+| Pasos 2-4, al lanzar el subagente (y mientras se espera) | `subagente` |
+| Paso 5 | `filtrado` |
+| Paso 6 | `fichas` |
+| Paso 7 (pipeline, publicar, snapshot) | `publicar` |
+
+No hay que contar nada a mano: `coste_fases.py` lee después la transcripción
+real de la sesión y reparte cada respuesta del modelo a su fase por la hora.
+Si se olvida una marca, lo de esa fase se suma a la anterior — no se pierde,
+sólo se agrupa peor.
+
 ## Paso 0 — Configuración y ventana
 
 Leer `config/filtros` (`action:"read_db"`, `db_op:"get"`). Ese documento manda
@@ -180,10 +204,15 @@ Notas por fuente:
   `ScraplingServer.fetch` (`real_chrome:true, disable_resources:true`). Partir
   el HTML por `<li>` y sacar campos con regex sobre
   `data-entity-urn="urn:li:jobPosting:` (`pipeline/fuentes/linkedin.py:parsear`).
-  **La etiqueta «remoto» de LinkedIn miente a menudo**: la modalidad se decide
-  con la frase literal de la descripción, no con la etiqueta del listado; si
-  el listado la marca remota y la descripción no la contradice, entra como
-  *remoto sin confirmar*.
+  **`f_WT=2` no filtra nada** (comprobado el 30-sep-2026: el endpoint de
+  invitado devuelve lo mismo con f_WT=1, 2, 3 o sin él). La modalidad se
+  decide con la frase literal de la descripción; si no hay ninguna, sólo
+  entra como *remoto sin confirmar* si la ubicación del listado es un país o
+  región (`Spain`, `European Union`…). Con ciudad y sin frase, `clasificar`
+  la deja fuera y **la anota sola en `data/filtradas.json`** (`motivo:
+  "modalidad"`): no hay que hacer nada con ella, y no se decide a mano. Por
+  eso `clasificar` va **después** de `preparar_datos.py` (Paso 1), que es
+  quien crea ese fichero.
 - **InfoJobs**: `teleworkingIds=2&sinceDate=_7_DAYS`. Listado vía
   `ScraplingServer.stealthy_fetch` (mismos parámetros que la ficha, más
   `extraction_type:"markdown", main_content_only:true`)
@@ -367,13 +396,16 @@ el agente:
 
    `fichas_completas_leidas` cuenta sólo las veces que hizo falta el
    subcomando `leer` de `linkedin.py`/`infojobs.py` (leer la ficha entera; el
-   atajo de `snippets` no cuenta). `tokens_estimados` es una estimación a ojo
-   del gasto de la
-   ejecución, o `null` si no se tiene ni idea — mejor sin cifra que una
-   inventada.
+   atajo de `snippets` no cuenta). `tokens_estimados` se deja en `null`:
+   desde el 30-sep-2026 los tokens se miden (paso siguiente), no se estiman.
 
-2. `python pipeline/registrar_ejecucion.py --agente agente.json` — junta esto
-   con los contadores acumulados y deja `out/historial.json`.
+2. `python pipeline/fase.py fin` y luego
+   `python pipeline/registrar_ejecucion.py --agente agente.json` — junta esto
+   con los contadores acumulados **y con el coste real por fase**
+   (`coste_fases.py`: lee la transcripción de esta sesión en
+   `~/.claude/projects/*/*.jsonl` y la de los subagentes, y cruza las horas
+   con `data/fases.json`) y deja `out/historial.json` con `tokens` y
+   `fases`. Copiar la tabla que imprime al resumen del Paso 8.
 3. Subirlo con `write_db` (`db_op:"set"`, `collection:"historial"`,
    `doc_id:<fecha de hoy>`, `file_path`).
 
@@ -384,7 +416,7 @@ esto todavía.
 
 ## Paso 8 — Resumen del día
 
-En pocas líneas: qué ventana se ha cubierto, si `ScraplingServer` ha estado
+En pocas líneas: la tabla de tiempo y tokens por fase del Paso 7, qué ventana se ha cubierto, si `ScraplingServer` ha estado
 disponible y qué fuentes se han podido consultar y cuáles no (y por qué),
 cuántas ofertas nuevas han entrado, cuáles son las mejores y por qué, cuántas
 se han podado por antigüedad, qué novedades ha traído el correo, si hay

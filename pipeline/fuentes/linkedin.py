@@ -131,7 +131,13 @@ def detallar_una(job, html_ficha):
     Scrapling trajo de `FICHA + id`."""
     txt = comun.texto(html_ficha)
     tn = comun.norm(txt)
-    etiqueta_remoto = job.get("q", "").startswith("R")
+    # 30-sep-2026: `f_WT=2` no filtra nada (ver `comun.RE_UBICACION_PAIS`),
+    # así que haber salido en una búsqueda «R» ya no basta como etiqueta de
+    # remoto: hace falta además que la ubicación sea un país/región y no una
+    # ciudad. Sin eso y sin frase de modalidad, queda `desconocida` y va a
+    # `filtradas` con motivo «modalidad» (ver `clasificar`).
+    etiqueta_remoto = (job.get("q", "").startswith("R")
+                       and comun.ubicacion_nivel_pais(comun.norm(job.get("ubicacion", ""))))
     mod = comun.modalidad(tn, comun.norm(job.get("ubicacion", "")), etiqueta_remoto)
     out = dict(job)
     out.update({
@@ -158,9 +164,36 @@ def resolver_etiqueta(html_pagina_completa):
     return _MAPA_ETIQUETA.get(comun.norm(m.group(1)))
 
 
+_DETALLE_MODALIDAD = {
+    "desconocida": "la descripción no dice la modalidad y la ubicación es una ciudad "
+                   "(LinkedIn ignora el filtro de remoto)",
+    "hibrido": "híbrido según la descripción",
+    "presencial": "presencial según la descripción",
+    "remoto_sin_confirmar": "remoto sin confirmar",
+}
+
+
+def apartada_por_modalidad(j, fecha=None):
+    """Entrada de `filtradas` (misma forma que las de `poda_antiguedad.py`)
+    para una oferta que `clasificar` deja fuera por modalidad. Así se ven en
+    la pestaña «Filtradas» en vez de desaparecer sin rastro."""
+    import datetime
+    t = j["modalidad"]["tipo"]
+    frase = (j["modalidad"]["frases"] or [""])[0].strip()
+    detalle = _DETALLE_MODALIDAD.get(t, t)
+    if frase:
+        detalle += f": «{frase[:120]}»"
+    return {
+        "id": "li-" + j["id"], "empresa": j.get("empresa"), "puesto": j.get("titulo"),
+        "fuente": "LinkedIn", "url": FICHA_COMPLETA + j["id"] + "/",
+        "ubicacion": j.get("ubicacion"), "motivo": "modalidad", "detalle": detalle,
+        "fecha": fecha or datetime.date.today().isoformat(),
+    }
+
+
 def clasificar(detalladas, cfg=None):
     aceptadas = comun.modalidades_aceptadas(cfg)
-    dentro, fuera, revisar = [], [], []
+    dentro, fuera, revisar, apartadas = [], [], [], []
     for j in detalladas:
         if j.get("cerrada"):
             fuera.append(j)
@@ -168,6 +201,7 @@ def clasificar(detalladas, cfg=None):
         t = j["modalidad"]["tipo"]
         if t not in aceptadas:
             fuera.append(j)
+            apartadas.append(apartada_por_modalidad(j))
             continue
         (revisar if t == "remoto_sin_confirmar" else dentro).append(j)
 
@@ -180,7 +214,8 @@ def clasificar(detalladas, cfg=None):
         ])
 
     filas = [fila(j) for j in dentro + revisar]
-    return {"filas": filas, "dentro": len(dentro), "revisar": len(revisar), "fuera": len(fuera)}
+    return {"filas": filas, "dentro": len(dentro), "revisar": len(revisar), "fuera": len(fuera),
+            "apartadas": apartadas}
 
 
 def snippets(job, max_terms=10):
@@ -251,6 +286,8 @@ def main():
     sp = sub.add_parser("clasificar")
     sp.add_argument("--in", dest="entrada", required=True)
     sp.add_argument("--config", help="config/filtros como JSON")
+    sp.add_argument("--filtradas", default=os.path.join(os.environ.get("RADAR_DATA", "data"), "filtradas.json"),
+                    help="donde anotar las apartadas por modalidad (se fusiona por id)")
     sp.add_argument("--out")
 
     sp = sub.add_parser("snippets")
@@ -323,7 +360,14 @@ def main():
             _escribir_json(args.out, res["filas"])
         else:
             print("\n".join(res["filas"]))
-        print(f"dentro={res['dentro']} revisar={res['revisar']} fuera={res['fuera']}",
+        if res["apartadas"]:
+            previas = _leer_json(args.filtradas) if os.path.exists(args.filtradas) else {}
+            for a in res["apartadas"]:
+                previas[a["id"]] = a
+            os.makedirs(os.path.dirname(args.filtradas) or ".", exist_ok=True)
+            _escribir_json(args.filtradas, previas)
+        print(f"dentro={res['dentro']} revisar={res['revisar']} fuera={res['fuera']} "
+              f"(apartadas por modalidad -> {args.filtradas}: {len(res['apartadas'])})",
               file=sys.stderr)
 
     elif args.cmd == "snippets":

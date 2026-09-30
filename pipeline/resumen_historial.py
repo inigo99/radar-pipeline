@@ -50,6 +50,22 @@ def _carga(ruta):
     raise SystemExit(f"{ruta} no existe")
 
 
+def _por_fase(docs):
+    """Media por fase de minutos y tokens equivalentes, sobre las ejecuciones
+    que ya traen `fases` (desde el 30-sep-2026)."""
+    acum = {}
+    for d in docs:
+        for f in d.get("fases") or []:
+            a = acum.setdefault(f["fase"], {"n": 0, "min": 0.0, "equivalente": 0, "salida": 0})
+            a["n"] += 1
+            a["min"] += f.get("duracion_min") or 0
+            a["equivalente"] += f.get("equivalente") or 0
+            a["salida"] += f.get("salida") or 0
+    return {k: {"ejecuciones": v["n"], "min_media": round(v["min"] / v["n"], 1),
+                "equivalente_medio": round(v["equivalente"] / v["n"]),
+                "salida_media": round(v["salida"] / v["n"])} for k, v in acum.items()}
+
+
 def resume(docs):
     """Agregados sobre una lista de documentos de `historial`, ordenados por fecha."""
     docs = sorted((d for d in docs if d.get("fecha")), key=lambda d: d["fecha"])
@@ -85,6 +101,7 @@ def resume(docs):
         "cobertura_por_fuente": {f: f"{v[0]}/{v[1]}" for f, v in sorted(cobertura.items())},
         "motivos_omision": omision,
         "tokens_estimados_media": round(sum(tokens) / len(tokens)) if tokens else None,
+        "por_fase": _por_fase(docs),
         "docs": docs,
     }
 
@@ -106,6 +123,12 @@ def main(argv):
     print(f"  tasa de duplicados sobre lo llevado a dedupe: {r['tasa_duplicados']:.0%}")
     if r["tokens_estimados_media"] is not None:
         print(f"  tokens estimados por ejecución (media): {r['tokens_estimados_media']}")
+    if r["por_fase"]:
+        total = sum(v["equivalente_medio"] for v in r["por_fase"].values()) or 1
+        print("  por fase (media de las ejecuciones que la registran):")
+        for f, v in sorted(r["por_fase"].items(), key=lambda kv: -kv[1]["equivalente_medio"]):
+            print(f"    · {f:<10} {v['min_media']:>5} min  {v['equivalente_medio']:>10,} tok. equiv. "
+                  f"({100*v['equivalente_medio']/total:.0f}%)  [{v['ejecuciones']} ejec.]")
     print("  cobertura por fuente (ejecuciones en que apareció / total):")
     for f, cob in r["cobertura_por_fuente"].items():
         print(f"    · {f}: {cob}")

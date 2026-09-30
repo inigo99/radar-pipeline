@@ -24,8 +24,8 @@ def prominencia_adaptada(term, usados):
 # Término corto (ES/EN) para cada clave de `pipeline/vocabulario.md`, usado
 # SÓLO para imprimir `skills_extra` en el CV (ver `_skills_extra_auto()` en
 # `dashboard.py`). No es la etiqueta del anuncio (esa la escribe cada oferta
-# a su manera): es un nombre de tecnología corto y estable, para que la línea
-# "También relevante para esta oferta" no arrastre frases largas del tipo
+# a su manera): es un nombre de tecnología corto y estable, para que la fila de
+# «Competencias técnicas» donde se integra no arrastre frases largas del tipo
 # "Python (5+ años) y async/asyncio". Si se añade una clave nueva a
 # `vocabulario.md`/`evidencia_orig` y no aparece aquí, `_skills_extra_auto()`
 # la ignora en vez de inventarse un término -- añadir la entrada aquí es lo

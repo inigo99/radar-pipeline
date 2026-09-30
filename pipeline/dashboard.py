@@ -69,7 +69,9 @@ def _skills_extra_auto(reqs, familia, idioma):
     """`skills_extra` determinista: si la oferta pesa una clave de vocabulario
     que Íñigo tiene de verdad (`evidencia_orig > 0`, mismo candado que
     `prominencia_adaptada`) y la variante de skills de su `familia` no la
-    enseña ya, se imprime como línea extra bajo «Competencias técnicas».
+    enseña ya, se integra en la fila de su categoría dentro de «Competencias
+    técnicas» (`skillsConExtra()` en dashboard.js; hasta el 30 sep 2026 salía
+    como línea aparte «También relevante para esta oferta»).
 
     Hasta el 18 sep 2026 esto dependía de que la tarea diaria lo rellenara a
     mano en `tailor/<id>.skills_extra` (paso 6 de TAREA_DIARIA.md) -- en la

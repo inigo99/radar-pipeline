@@ -73,6 +73,14 @@ let STATE={}, DOCS={}, CORREO={}, BANCO={}, db=null, dbListo=false, dbFallo=fals
 let CFG=Object.assign({},CFG_DEF), cfgAbierta=false, cfgGuardando=false;
 let sampleNs=null, sampleTried=false;
 let nuevaAbierta=false, nuevaGuardando=false, nuevaMsg='', MANUAL={};
+/* Idioma corregido a mano (30 sep 2026). `DATA` trae el idioma que detectó la
+   tarea diaria, y a veces se equivoca (ofertas en español marcadas como `en`).
+   El selector de la ficha guarda la corrección en `idioma/<id>` junto con el
+   titular y el resumen ya traducidos; se aplica en vivo encima de `DATA` al
+   cargar la página, así que no depende de que la tarea ni el snapshot lo
+   recojan. `_orig` en cada fila guarda lo horneado para poder volver atrás. */
+let IDIOMA={};
+const IDI_TRADUCIENDO={};  // id -> true mientras Claude traduce titular/resumen
 let bancoAbierto=false;  // si el <details> del banco de respuestas está desplegado; render() lo rehace entero y si no se recuerda se cierra solo al editar/guardar
 const GEN={};   // id -> {carta:{texto,estado},mail:{...}} en curso
 const CHAT={};      // id -> {texto, ctrl} de la respuesta que se está escribiendo
@@ -121,6 +129,11 @@ async function initEstado(){
     snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
     CORREO=nuevo; render();
   }, e=>{});
+  db.collection('idioma').onSnapshot(snap=>{
+    const nuevo={};
+    snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
+    IDIOMA=nuevo; aplicaIdiomas(); render();
+  }, e=>{});
   db.collection('estado').onSnapshot(snap=>{
     const nuevo={};
     snap.docs.forEach(d=>{ const v=d.data(); if(v) nuevo[d.id]=v; });
@@ -144,6 +157,7 @@ async function initEstado(){
          buena. */
       db.doc('manual/'+d.id).delete().catch(()=>{});
     });
+    aplicaIdiomas();
     refrescaFoco();
     render();
   }, e=>{});
@@ -189,9 +203,9 @@ function cancelaBorrado(id){ delete BORRAR_CONFIRMAR[id]; render(); }
 async function _borrarUno(id){
   const i = DATA.findIndex(r=>r.id===id);
   if(i>=0) DATA.splice(i,1);
-  delete STATE[id]; delete DOCS[id]; delete CORREO[id]; delete MANUAL[id];
+  delete STATE[id]; delete DOCS[id]; delete CORREO[id]; delete MANUAL[id]; delete IDIOMA[id];
   if(!db) return true;
-  const cols = ['ofertas','tailor','estado','docs','correo','manual'];
+  const cols = ['ofertas','tailor','estado','docs','correo','manual','idioma'];
   const r = await Promise.allSettled(cols.map(c=>db.doc(c+'/'+id).delete()));
   return !r.some(x=>x.status==='rejected');
 }
@@ -628,6 +642,74 @@ function autoSkillsExtra(reqs, familia, idioma){
   return salida.join(', ');
 }
 
+/* `skillsExtra` al otro idioma, término a término con `CV.terminos_skill`
+   (el mismo diccionario del que sale). Lo que no está en el diccionario
+   (p.ej. un `skills_extra` puesto a mano) se deja tal cual. */
+function traduceSkillsExtra(txt, idioma){
+  if(!txt) return '';
+  const pares = Object.values(CV.terminos_skill||{});
+  return String(txt).split(',').map(t=>t.trim()).filter(Boolean).map(t=>{
+    const n = normTxt(t);
+    const par = pares.find(p=>normTxt(p[0])===n || normTxt(p[1])===n);
+    return par ? (idioma==='en' ? par[1] : par[0]) : t;
+  }).join(', ');
+}
+
+function aplicaIdiomas(){
+  for(const r of DATA){
+    if(!r._orig) r._orig = {idioma:r.idioma, titular:r.titular, resumen:r.resumen, skillsExtra:r.skillsExtra};
+    const o = r._orig, c = IDIOMA[r.id];
+    if(c && (c.idioma==='es' || c.idioma==='en') && c.idioma!==o.idioma){
+      r.idioma = c.idioma;
+      r.titular = limpiaTitular(c.titular||'') || o.titular;
+      r.resumen = c.resumen || o.resumen;
+      r.skillsExtra = traduceSkillsExtra(o.skillsExtra, c.idioma);
+    } else {
+      r.idioma = o.idioma; r.titular = o.titular; r.resumen = o.resumen; r.skillsExtra = o.skillsExtra;
+    }
+  }
+}
+
+function promptTraduccion(r, idioma){
+  const destino = idioma==='en' ? 'inglés' : 'español';
+  return `Traduce al ${destino} estos dos campos del CV de un candidato. Mantén exactamente el mismo contenido: no añadas ni quites logros, tecnologías, cifras ni titulaciones. Tono profesional y natural, no literal. El titular es una identidad profesional corta (máx. 6 palabras) y nunca lleva "Senior", "Sénior" ni "Sr.". El resumen, como máximo 240 caracteres.
+
+Titular: ${r._orig.titular}
+Resumen: ${r._orig.resumen}
+
+Devuelve SOLO un JSON: {"titular": "...", "resumen": "..."}`;
+}
+
+async function cambiaIdioma(id, idioma){
+  const r = DATA.find(x=>x.id===id);
+  if(!r || (idioma!=='es' && idioma!=='en')) return;
+  if(!r._orig) aplicaIdiomas();
+  if(idioma===r._orig.idioma){
+    delete IDIOMA[id]; aplicaIdiomas(); render();
+    if(db){ try{ await db.doc('idioma/'+id).delete(); }catch(e){} }
+    toast('Idioma original restaurado');
+    return;
+  }
+  if(!sampleTried){ sampleTried=true; try{ sampleNs = await claude.use('sample'); }catch(e){ sampleNs=null; } }
+  if(!sampleNs){ toast('La traducción con Claude no está disponible en esta vista.'); render(); return; }
+  IDI_TRADUCIENDO[id]=true; render();
+  let t=null;
+  try{
+    const res = await sampleNs(promptTraduccion(r, idioma), {modelTier:'default', cache:false});
+    t = parseaJSON(res.text||'');
+  }catch(e){ t=null; }
+  delete IDI_TRADUCIENDO[id];
+  if(!t || !t.titular || !t.resumen){ render(); toast('No se ha podido traducir el titular y el resumen; inténtalo de nuevo'); return; }
+  const doc = {idioma, titular:limpiaTitular(String(t.titular).slice(0,120)) || tituloPorDefecto(r.familia),
+               resumen:String(t.resumen).slice(0,320), actualizado:new Date().toISOString()};
+  IDIOMA[id]=doc; aplicaIdiomas(); render();
+  if(db){
+    try{ await db.doc('idioma/'+id).set(doc); }
+    catch(e){ toast('Cambiado aquí, pero no se ha podido guardar en la base de datos'); return; }
+  }
+  toast(idioma==='es' ? 'Oferta pasada a español' : 'Oferta pasada a inglés');
+}
+
 function parseaJSON(texto){
   if(!texto) return null;
   let t = String(texto).trim();
@@ -921,6 +1003,17 @@ function detailHTML(r){
     ${r.alerta?`<p class="alert"><b>Aviso.</b> ${esc(r.alerta)}</p>`:''}
     <div class="dgrid">
       <div>
+        <div class="dsec"><p class="dh">Idioma de la oferta</p>
+          <div class="track">
+            <select data-idioma="${r.id}" aria-label="Idioma de la oferta" ${IDI_TRADUCIENDO[r.id]?'disabled':''}>
+              <option value="es" ${r.idioma==='es'?'selected':''}>Español</option>
+              <option value="en" ${r.idioma==='en'?'selected':''}>Inglés</option>
+            </select>
+            ${IDI_TRADUCIENDO[r.id]?'<span class="pt" style="font-size:12.5px"><span class="dot"></span> Traduciendo titular y resumen…</span>'
+              : (r._orig && r.idioma!==r._orig.idioma ? '<span class="pt" style="font-size:12.5px">Corregido a mano</span>' : '')}
+          </div>
+          ${(DOCS[r.id]||{}).carta || (DOCS[r.id]||{}).mail ? (r._orig && r.idioma!==r._orig.idioma ? '<p class="hint">La carta y el correo ya generados siguen en el idioma anterior: regenéralos.</p>' : '') : ''}
+        </div>
         <div class="dsec"><p class="dh">Titular del CV adaptado</p><p class="note"><b>${esc(r.titular)}</b></p></div>
         <div class="dsec"><p class="dh">Lo que juega a tu favor</p><div class="tags">${strs}</div></div>
         <div class="dsec"><p class="dh">Requisitos que no cubres</p>${brechaHTML(r)}</div>
@@ -1664,6 +1757,9 @@ function bind(){
   document.querySelectorAll('[data-unapply]').forEach(b=>b.onclick=()=>{
     guardar(b.dataset.unapply,{estado:'activa', fase:null, fechaAplicacion:null}); toast('Devuelta a activas');
   });
+  document.querySelectorAll('[data-idioma]').forEach(sel=>sel.onchange=()=>{
+    cambiaIdioma(sel.dataset.idioma, sel.value);
+  });
   document.querySelectorAll('[data-fase]').forEach(sel=>sel.onchange=()=>{
     guardar(sel.dataset.fase,{fase:sel.value});
   });
@@ -1947,6 +2043,56 @@ const CV_ANCHO = 595.28, CV_ALTO = 841.89;
 const CV_PADX = 34.02, CV_PADY = 25.51;   // 12 mm / 9 mm
 const CV_LH = 1.36;   // más aire entre líneas: el CV corto ya no necesita apretar
 
+/* Tecnologías propias de ESTA oferta (`skillsExtra`) que la variante de la
+   familia no saca por defecto (p.ej. React en una oferta de AI agent
+   engineer). Hasta el 30 sep 2026 salían en una línea aparte, «También
+   relevante para esta oferta: …»; Íñigo pidió integrarlas en las filas que ya
+   existen. Cada término va a la fila de la categoría donde aparece en
+   CUALQUIER variante del perfil (React -> «Desarrollo», Airflow -> «Datos»);
+   si esa categoría no existe en la variante de esta familia, a la más
+   parecida (FALLBACK_CAT), y si el término no aparece en ninguna, a
+   «Herramientas». Se pone al principio de la fila, tras la etiqueta, porque
+   es lo que pide la oferta. Mismo candado que siempre: `skillsExtra` sólo
+   trae tecnologías que ya tiene. */
+const FALLBACK_CAT = {datos:['ia','tools'], ia:['datos','tools'], dev:['devops','tools'],
+                      devops:['dev','tools'], leng:['dev','tools'], tools:['dev','ia','datos']};
+const STOP_SK = new Set(['de','del','y','e','en','con','ia','ai','and','of','for','the']);
+function skillsConExtra(SK_ALL, skCfg, extra){
+  const SK = SK_ALL[skCfg.variante] || {};
+  const orden = skCfg.orden || Object.keys(SK);
+  const out = {}; orden.forEach(c=>out[c]=SK[c]||'');
+  const terms = String(extra||'').split(',').map(t=>t.trim()).filter(Boolean);
+  if(!terms.length || !orden.length) return out;
+  const destino = {};   // cat -> [términos]
+  for(const t of terms){
+    const n = normTxt(t);
+    if(orden.some(c=>normTxt(out[c]).includes(n))) continue;   // ya sale
+    /* «Agentes de IA» cuando la fila ya dice «agentes»: mismo concepto con
+       otras palabras. Se da por presente si todas sus palabras con contenido
+       ya salen como palabra suelta en las filas de esta variante. */
+    const pal = n.split(/[^a-z0-9+#]+/).filter(x=>x && !STOP_SK.has(x));
+    const filas = ' '+orden.map(c=>normTxt(out[c])).join(' ').replace(/[^a-z0-9+#]+/g,' ')+' ';
+    if(pal.length && pal.every(x=>filas.includes(' '+x+' '))) continue;
+    let cat = null;
+    for(const v of Object.keys(SK_ALL)){
+      const cats = SK_ALL[v] || {};
+      const c = Object.keys(cats).find(k=>normTxt(cats[k]).includes(n));
+      if(c){ cat = c; if(orden.includes(c)) break; }
+    }
+    if(!cat || !orden.includes(cat)){
+      const alt = (FALLBACK_CAT[cat||'tools']||[]).concat(['tools']).find(c=>orden.includes(c));
+      cat = alt || orden[orden.length-1];
+    }
+    (destino[cat] = destino[cat] || []).push(t);
+  }
+  for(const c of Object.keys(destino)){
+    const fila = out[c], i = fila.indexOf(': ');
+    const add = destino[c].join(', ');
+    out[c] = i>=0 ? fila.slice(0,i+2)+add+', '+fila.slice(i+2) : add+', '+fila;
+  }
+  return out;
+}
+
 function cvBloques(r, FS){
   const idi = r.idioma==='en' ? 'en' : 'es';
   const L  = CV.labels[idi];
@@ -1997,17 +2143,8 @@ function cvBloques(r, FS){
   bl.push({items:L.compl_items, size:8.8, f:'TR', mt:0, mb:3*PX});
 
   h2(L.skills);
-  for(const s of skCfg.orden) bl.push({s:SK[s], size:FS, f:'TR', mb:2*PX});
-  /* Tecnologías propias de ESTA oferta que la variante de familia no saca por
-     defecto (p.ej. React en una oferta de AI agent engineer). Viene de
-     `tailor/<id>.skills_extra`, escrito a mano por oferta y sujeto al mismo
-     candado anti-invención que el resto del CV: sólo tecnologías que ya
-     tiene, nunca inventadas. Vacío para las ofertas que no lo necesiten. */
-  if(r.skillsExtra) bl.push({
-    s:(idi==='en' ? 'Also relevant for this role: ' : 'También relevante para esta oferta: ')+r.skillsExtra,
-    size:FS, f:'TR', mb:2*PX, just:true
-  });
-
+  const SKX = skillsConExtra(SK_ALL, skCfg, r.skillsExtra);
+  for(const s of skCfg.orden) bl.push({s:SKX[s], size:FS, f:'TR', mb:2*PX});
   h2(L.lid);
   bl.push({s:L.lid_txt, size:FS, f:'TR', mb:3.5*PX, just:true});
   h2(L.idi);

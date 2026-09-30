@@ -659,7 +659,7 @@ function aplicaIdiomas(){
   for(const r of DATA){
     if(!r._orig) r._orig = {idioma:r.idioma, titular:r.titular, resumen:r.resumen, skillsExtra:r.skillsExtra};
     const o = r._orig, c = IDIOMA[r.id];
-    if(c && (c.idioma==='es' || c.idioma==='en') && c.idioma!==o.idioma){
+    if(c && (c.idioma==='es' || c.idioma==='en')){
       r.idioma = c.idioma;
       r.titular = limpiaTitular(c.titular||'') || o.titular;
       r.resumen = c.resumen || o.resumen;
@@ -680,16 +680,19 @@ Resumen: ${r._orig.resumen}
 Devuelve SOLO un JSON: {"titular": "...", "resumen": "..."}`;
 }
 
+async function restauraIdioma(id){
+  delete IDIOMA[id]; aplicaIdiomas(); render();
+  if(db){ try{ await db.doc('idioma/'+id).delete(); }catch(e){} }
+  toast('Idioma y textos originales restaurados');
+}
+
 async function cambiaIdioma(id, idioma){
   const r = DATA.find(x=>x.id===id);
   if(!r || (idioma!=='es' && idioma!=='en')) return;
   if(!r._orig) aplicaIdiomas();
-  if(idioma===r._orig.idioma){
-    delete IDIOMA[id]; aplicaIdiomas(); render();
-    if(db){ try{ await db.doc('idioma/'+id).delete(); }catch(e){} }
-    toast('Idioma original restaurado');
-    return;
-  }
+  /* Siempre se traduce, también al idioma que ya tenía: hay ofertas bien
+     marcadas («es») cuyo resumen salió en inglés, y ésa es la forma de
+     rehacerlo. Traducir un texto que ya está en ese idioma lo deja igual. */
   if(!sampleTried){ sampleTried=true; try{ sampleNs = await claude.use('sample'); }catch(e){ sampleNs=null; } }
   if(!sampleNs){ toast('La traducción con Claude no está disponible en esta vista.'); render(); return; }
   IDI_TRADUCIENDO[id]=true; render();
@@ -707,7 +710,7 @@ async function cambiaIdioma(id, idioma){
     try{ await db.doc('idioma/'+id).set(doc); }
     catch(e){ toast('Cambiado aquí, pero no se ha podido guardar en la base de datos'); return; }
   }
-  toast(idioma==='es' ? 'Oferta pasada a español' : 'Oferta pasada a inglés');
+  toast(idioma==='es' ? 'Titular y resumen en español' : 'Titular y resumen en inglés');
 }
 
 function parseaJSON(texto){
@@ -1010,9 +1013,10 @@ function detailHTML(r){
               <option value="en" ${r.idioma==='en'?'selected':''}>Inglés</option>
             </select>
             ${IDI_TRADUCIENDO[r.id]?'<span class="pt" style="font-size:12.5px"><span class="dot"></span> Traduciendo titular y resumen…</span>'
-              : (r._orig && r.idioma!==r._orig.idioma ? '<span class="pt" style="font-size:12.5px">Corregido a mano</span>' : '')}
+              : `<button class="btn" data-retrad="${r.id}" style="padding:6px 12px;font-size:12.5px" title="Por si el titular o el resumen salieron en el otro idioma">Rehacer textos en ${r.idioma==='en'?'inglés':'español'}</button>
+                 ${IDIOMA[r.id]?`<button class="btn" data-idiorig="${r.id}" style="padding:6px 12px;font-size:12.5px">Restaurar original</button>`:''}`}
           </div>
-          ${(DOCS[r.id]||{}).carta || (DOCS[r.id]||{}).mail ? (r._orig && r.idioma!==r._orig.idioma ? '<p class="hint">La carta y el correo ya generados siguen en el idioma anterior: regenéralos.</p>' : '') : ''}
+          ${IDIOMA[r.id] && ((DOCS[r.id]||{}).carta || (DOCS[r.id]||{}).mail) ? '<p class="hint">La carta y el correo ya generados no cambian solos: regenéralos si estaban en el otro idioma.</p>' : ''}
         </div>
         <div class="dsec"><p class="dh">Titular del CV adaptado</p><p class="note"><b>${esc(r.titular)}</b></p></div>
         <div class="dsec"><p class="dh">Lo que juega a tu favor</p><div class="tags">${strs}</div></div>
@@ -1760,6 +1764,10 @@ function bind(){
   document.querySelectorAll('[data-idioma]').forEach(sel=>sel.onchange=()=>{
     cambiaIdioma(sel.dataset.idioma, sel.value);
   });
+  document.querySelectorAll('[data-retrad]').forEach(b=>b.onclick=()=>{
+    const r=DATA.find(x=>x.id===b.dataset.retrad); if(r) cambiaIdioma(r.id, r.idioma);
+  });
+  document.querySelectorAll('[data-idiorig]').forEach(b=>b.onclick=()=>restauraIdioma(b.dataset.idiorig));
   document.querySelectorAll('[data-fase]').forEach(sel=>sel.onchange=()=>{
     guardar(sel.dataset.fase,{fase:sel.value});
   });

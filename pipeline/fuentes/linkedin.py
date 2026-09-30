@@ -142,6 +142,7 @@ def detallar_una(job, html_ficha):
     out = dict(job)
     out.update({
         "modalidad": mod,
+        "publicada": job.get("fecha", ""),
         "ambito": comun.ambito(tn),
         "salario": comun.salario(txt),
         "anios": comun.anios(tn),

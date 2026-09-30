@@ -305,6 +305,44 @@ def test_linkedin_sin_frase_y_ubicacion_ciudad_queda_fuera():
     assert a["id"] == "li-1" and a["motivo"] == "modalidad" and a["url"].endswith("/1/")
 
 
+# -------------------------------------------------------------- ventana ----
+
+def test_ventana_se_ensancha_si_la_ultima_ejecucion_es_vieja():
+    import datetime as dt
+    z = dt.timezone.utc
+    ahora = dt.datetime(2026, 9, 30, 8, 0, tzinfo=z)
+    d, h = comun.ventana(dt.datetime(2026, 9, 29, 8, 5, tzinfo=z), 24, ahora)
+    assert h == 24 and d == ahora - dt.timedelta(hours=24)   # manda el mínimo
+    d, h = comun.ventana(dt.datetime(2026, 9, 27, 8, 0, tzinfo=z), 24, ahora)
+    assert h == 72 and comun.since_infojobs(h) == "_7_DAYS"  # día perdido -> recupera
+    assert comun.since_infojobs(24) == "_24_HOURS" and comun.since_infojobs(400) == "_30_DAYS"
+
+
+def test_publicada_relativa_infojobs():
+    import datetime as dt
+    hoy = dt.date(2026, 9, 30)
+    assert comun.publicada_relativa("publicada hace 3d en madrid", hoy) == "2026-09-27"
+    assert comun.publicada_relativa("hace 5 horas", hoy) == "2026-09-30"
+    assert comun.publicada_relativa("sin fecha", hoy) == ""
+
+
+def test_filtrar_descarta_fuera_de_ventana_y_sin_fecha_no_acotada():
+    from pipeline import filtrar as F
+    cands = [
+        {"id": "li-1", "empresa": "A", "puesto": "DS", "publicada": "2026-09-29"},  # dentro
+        {"id": "li-2", "empresa": "B", "puesto": "DS", "publicada": "2026-09-10"},  # fuera
+        {"id": "mf-3", "empresa": "C", "puesto": "DS"},                            # sin fecha, acotada
+        {"id": "in-4", "empresa": "D", "puesto": "DS"},                            # sin fecha, no acotada
+        {"id": "in-5", "empresa": "E", "puesto": "DS", "publicada": "2026-09-30"}, # dentro
+    ]
+    ok, fuera = F.filtrar(cands, {"ventana_desde": "2026-09-29T08:00:00+00:00"})
+    assert [c["id"] for c in ok] == ["li-1", "mf-3", "in-5"]
+    assert {f["oferta"]["id"]: f["motivo"] for f in fuera} == {
+        "li-2": "fuera de ventana", "in-4": "sin fecha de publicación"}
+    ok, fuera = F.filtrar(cands, {})   # sin ventana no se comprueba nada
+    assert len(ok) == 5 and not fuera
+
+
 if __name__ == "__main__":
     import inspect
     mod = sys.modules[__name__]

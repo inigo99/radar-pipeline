@@ -11,7 +11,7 @@ Tecnoempleo/Indeed sólo se caía si alguien la veía a tiempo. Este script se
 aplica **después de recoger candidatas de todas las fuentes y antes de
 `dedupe.py`**, así que cubre a todas por igual.
 
-Tres comprobaciones, todas mecánicas sobre campos que ya vienen calculados
+Cuatro comprobaciones, todas mecánicas sobre campos que ya vienen calculados
 (nunca sobre HTML crudo):
 
   1. **`excluir_empresas`**: misma regla que ya usaba `li.filtrar()` en
@@ -30,6 +30,12 @@ Tres comprobaciones, todas mecánicas sobre campos que ya vienen calculados
      estimada de `pipeline/bandas.json`, ya llega más adelante en `puntuar.py`.
      Si `exigir_salario_publicado` es verdad y no hay ninguna cifra
      reconocible, también se descarta.
+  4. **Ventana de publicación** (30-sep-2026): si hay `ventana_desde` en
+     `filtros` (o `--desde`), la oferta debe haberse PUBLICADO ese día o
+     después (`publicada`, ISO; compara por día). Sin `publicada` sólo pasa si
+     la fuente ya acotó la búsqueda por fecha (ids `li-`, `ij-`, `mf-`); el
+     resto (Indeed, Tecnoempleo, semanales) sin fecha verificable se aparta con
+     motivo «sin fecha de publicación». Sin `ventana_desde` no se comprueba.
 
 **Lo que este script NO toca, a propósito:**
 
@@ -64,7 +70,9 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import datetime
 from dedupe import sin_acentos  # reutiliza la misma normalización que dedupe.py
+from fuentes import comun  # en_ventana()
 from estadisticas import acumula  # instrumentación de coste, ver pipeline/estadisticas.py
 
 _RE_K = re.compile(r'(\d{1,3})\s*[kK]\b')
@@ -107,6 +115,11 @@ def _keyword_excluida(puesto, excluir_keywords):
     return None
 
 
+# Fuentes cuya consulta/filtrar() ya descarta por fecha: sin `publicada` se
+# dan por buenas (LinkedIn f_TPR, InfoJobs sinceDate, Manfred updatedAt).
+_FUENTES_ACOTADAS = ("li-", "ij-", "mf-")
+
+
 def filtrar(candidatas, filtros):
     """(supervivientes, filtradas). Cada filtrada dice el motivo y el detalle,
     en el mismo formato que espera la colección `filtradas` del dashboard."""
@@ -115,9 +128,24 @@ def filtrar(candidatas, filtros):
     salario_min = filtros.get("salario_min")
     exigir_pub = bool(filtros.get("exigir_salario_publicado"))
 
+    desde = filtros.get("ventana_desde")
+    if desde:
+        desde = datetime.datetime.fromisoformat(str(desde).replace("Z", "+00:00")).date()
+
     supervivientes, filtradas = [], []
     for cand in candidatas:
         empresa, puesto = cand.get("empresa", ""), cand.get("puesto", "")
+
+        if desde:
+            dentro = comun.en_ventana(cand.get("publicada"), desde)
+            if dentro is False:
+                filtradas.append(dict(oferta=cand, motivo="fuera de ventana",
+                                       detalle=f"publicada {cand.get('publicada')} (ventana desde {desde})"))
+                continue
+            if dentro is None and not str(cand.get("id", "")).startswith(_FUENTES_ACOTADAS):
+                filtradas.append(dict(oferta=cand, motivo="sin fecha de publicación",
+                                       detalle="fuente sin filtro de fecha en la consulta"))
+                continue
 
         choque = _empresa_excluida(empresa, excluir_empresas)
         if choque:
@@ -167,6 +195,9 @@ def main(argv):
             filtros = json.load(fh)
     else:
         print("AVISO: sin --filtros, no se descarta nada por salario ni listas de exclusión.")
+
+    if "--desde" in argv:
+        filtros["ventana_desde"] = argv[argv.index("--desde") + 1]
 
     supervivientes, filtradas = filtrar(candidatas, filtros)
 

@@ -125,6 +125,11 @@ lo perdido. `config/estado_tarea` **sólo se escribe si la ejecución termina
 bien y se han podido cubrir todas las `fuentes`**: es lo que hace que un día
 fallido no se salte ofertas.
 
+Calcular la ventana con `python pipeline/ventana.py <ultima_ejecucion|-> <ventana_horas>`:
+devuelve `desde` (ISO), `horas` e `infojobs` (`sinceDate`). Usar `horas` en
+LinkedIn (`f_TPR=r<horas*3600>`), `infojobs` en InfoJobs y pasar `desde` a
+`filtrar.py` (Paso 5): **sólo entran ofertas publicadas dentro de la ventana**.
+
 Apuntar la hora de inicio (ISO, con zona) en cuanto arranque este paso: hace
 falta en el Paso 7 para calcular cuánto ha durado la ejecución.
 
@@ -198,7 +203,7 @@ tres campos.
 
 Notas por fuente:
 
-- **LinkedIn**: `f_TPR=r86400&f_WT=2` (24 h, remoto) más búsquedas por las
+- **LinkedIn**: `f_TPR=r<horas*3600>&f_WT=2` (`horas` de `ventana.py`, remoto) más búsquedas por las
   zonas locales sin `f_WT`, contra el endpoint de invitado
   (`jobs-guest/jobs/api/seeMoreJobPostings/search`), vía
   `ScraplingServer.fetch` (`real_chrome:true, disable_resources:true`). Partir
@@ -213,7 +218,7 @@ Notas por fuente:
   "modalidad"`): no hay que hacer nada con ella, y no se decide a mano. Por
   eso `clasificar` va **después** de `preparar_datos.py` (Paso 1), que es
   quien crea ese fichero.
-- **InfoJobs**: `teleworkingIds=2&sinceDate=_7_DAYS`. Listado vía
+- **InfoJobs**: `teleworkingIds=2&sinceDate=<infojobs de ventana.py>`. Listado vía
   `ScraplingServer.stealthy_fetch` (mismos parámetros que la ficha, más
   `extraction_type:"markdown", main_content_only:true`)
   (el HTML crudo son 1,5M de caracteres; en markdown, ~50K, y las URLs

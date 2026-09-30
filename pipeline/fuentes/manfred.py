@@ -156,6 +156,7 @@ def detallar_una(oferta_listado, ficha_json):
     out = dict(oferta_listado)
     out.update({
         "reqs": reqs,
+        "publicada": (oferta_listado.get("updatedAt") or "")[:10],
         "idiomas": ",".join(f'{l.get("name")}:{l.get("level")}' for l in (j.get("languages") or [])),
         "anios": comun.anios(comun.norm(ask)),
         "_ask": ask,

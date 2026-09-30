@@ -111,6 +111,8 @@ def detallar_una(oferta, html_ficha):
         "anios": comun.anios(comun.norm(todo)),
         "etiqueta": (m_etq.group(0) if m_etq else ""),
         "publicado": (m_pub.group(0) if m_pub else ""),
+        # Fecha ISO calculada del «Hace Nd» de la ficha (ver `comun.ventana`).
+        "publicada": comun.publicada_relativa(comun.norm(todo), __import__("datetime").date.today()),
         # La modalidad se decide con la descripción, no con la etiqueta del
         # panel: una oferta etiquetada «solo teletrabajo» puede decir en el
         # cuerpo «para nuestras oficinas centrales» (visto el 16-sep-2026).

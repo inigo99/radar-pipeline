@@ -288,3 +288,62 @@ RE_TITULO_NO = re.compile(
 def titulo_vale(titulo):
     t = norm(titulo)
     return bool(RE_TITULO_OK.search(t)) and not RE_TITULO_NO.search(t)
+
+
+# ---------------------------------------------------------- ventana ----
+# 30-sep-2026: el radar sólo debe recoger ofertas PUBLICADAS dentro de la
+# ventana de búsqueda (desde `config/estado_tarea.ultima_ejecucion`, mínimo
+# `ventana_horas`). Hasta hoy sólo LinkedIn descartaba por fecha; InfoJobs
+# usaba `sinceDate` fijo, Manfred sólo tiene `updatedAt` y el resto no se
+# comprobaba en código.
+
+def ventana(ultima_ejecucion, ventana_horas, ahora):
+    """(desde, horas): inicio de la ventana y su longitud en horas, redondeada
+    hacia arriba. `desde` = min(ultima_ejecucion, ahora - ventana_horas), así
+    una ejecución fallida ensancha la ventana. Datetimes con zona; si
+    `ultima_ejecucion` es None sólo manda `ventana_horas`."""
+    import datetime
+    minimo = ahora - datetime.timedelta(hours=ventana_horas or 24)
+    desde = min(ultima_ejecucion, minimo) if ultima_ejecucion else minimo
+    horas = int(-(-(ahora - desde).total_seconds() // 3600))
+    return desde, max(horas, 1)
+
+
+def since_infojobs(horas):
+    """`sinceDate` de InfoJobs más ajustado que cubra `horas`. Es grueso a
+    propósito: el corte fino lo hace `filtrar.py` con `publicada`."""
+    for lim, val in ((24, "_24_HOURS"), (168, "_7_DAYS"), (360, "_15_DAYS")):
+        if horas <= lim:
+            return val
+    return "_30_DAYS"
+
+
+_RE_HACE = re.compile(r"hace\s+(\d+)\s*(d|h|m|min|dias?|horas?|minutos?)\b")
+
+
+def publicada_relativa(texto_norm, hoy):
+    """«hace 3d» / «hace 5 horas» -> fecha ISO (`hoy` es un date). Los minutos
+    y horas cuentan como hoy (la ficha no da más resolución). '' si no hay."""
+    import datetime
+    m = _RE_HACE.search(texto_norm or "")
+    if not m:
+        return ""
+    n, u = int(m.group(1)), m.group(2)
+    dias = n if u.startswith("d") else 0
+    return (hoy - datetime.timedelta(days=dias)).isoformat()
+
+
+def en_ventana(publicada, desde):
+    """True/False si `publicada` (ISO, fecha o fecha-hora) cae dentro de la
+    ventana que empieza en `desde` (date, o datetime); None si no hay fecha.
+    Compara por día: ninguna fuente da mejor resolución que eso."""
+    import datetime
+    if not publicada:
+        return None
+    try:
+        d = datetime.date.fromisoformat(str(publicada)[:10])
+    except ValueError:
+        return None
+    if isinstance(desde, datetime.datetime):
+        desde = desde.date()
+    return d >= desde

@@ -79,6 +79,23 @@ def construir_consultas(titulos, location="Spain", horas=24, paginas=2, remoto=F
     return out
 
 
+# Nombre de `areas_locales` -> `location` que entiende LinkedIn.
+LOCATION_LOCAL = {"Navarra": "Navarre, Spain", "Gipuzkoa": "Gipuzkoa, Basque Country, Spain"}
+
+
+def consultas_del_dia(cfg, horas=24, paginas=2):
+    """Todas las URLs del día en una sola lista: remoto (Spain) + cada zona de
+    `areas_locales`. 5-oct-2026: las búsquedas locales se saltaban a mano
+    (30-sep, 4-oct); así no dependen de acordarse."""
+    titulos = cfg.get("titulos") or []
+    out = construir_consultas(titulos, "Spain", horas, paginas, remoto=True)
+    for zona in cfg.get("areas_locales") or []:
+        loc = LOCATION_LOCAL.get(zona, zona + ", Spain")
+        out += [dict(c, etiqueta=c["etiqueta"] + "|" + zona)
+                for c in construir_consultas(titulos, loc, horas, 1)]
+    return out
+
+
 def parsear(html, etiqueta, jobs=None):
     """Trocea por `<li` y saca los campos con regex sobre el HTML crudo (el
     endpoint de invitado no se puede parsear con DOMParser/BeautifulSoup de
@@ -136,8 +153,10 @@ def detallar_una(job, html_ficha):
     # remoto: hace falta además que la ubicación sea un país/región y no una
     # ciudad. Sin eso y sin frase de modalidad, queda `desconocida` y va a
     # `filtradas` con motivo «modalidad» (ver `clasificar`).
-    etiqueta_remoto = (job.get("q", "").startswith("R")
-                       and comun.ubicacion_nivel_pais(comun.norm(job.get("ubicacion", ""))))
+    # 5-oct-2026: sin exigir además `q` que empiece por «R». Si `f_WT` no
+    # filtra, la búsqueda de origen no aporta nada, y exigirla dejaba fuera
+    # ofertas con ubicación «España» cuando `q` faltaba o era local (Minsait).
+    etiqueta_remoto = comun.ubicacion_nivel_pais(comun.norm(job.get("ubicacion", "")))
     mod = comun.modalidad(tn, comun.norm(job.get("ubicacion", "")), etiqueta_remoto)
     out = dict(job)
     out.update({
@@ -252,7 +271,8 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("consultas")
-    sp.add_argument("--titulos", required=True, help="JSON: lista de títulos")
+    sp.add_argument("--titulos", help="JSON: lista de títulos")
+    sp.add_argument("--config", help="config/filtros como JSON: remoto + zonas locales de una vez")
     sp.add_argument("--location", default="Spain")
     sp.add_argument("--horas", type=int, default=24)
     sp.add_argument("--paginas", type=int, default=2)
@@ -305,8 +325,11 @@ def main():
     args = p.parse_args()
 
     if args.cmd == "consultas":
-        titulos = _leer_json(args.titulos)
-        out = construir_consultas(titulos, args.location, args.horas, args.paginas, args.remoto)
+        if args.config:
+            out = consultas_del_dia(_leer_json(args.config), args.horas, args.paginas)
+        else:
+            out = construir_consultas(_leer_json(args.titulos), args.location, args.horas,
+                                      args.paginas, args.remoto)
         _escribir_json(args.out, out)
 
     elif args.cmd == "parsear":

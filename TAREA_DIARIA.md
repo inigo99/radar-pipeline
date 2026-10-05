@@ -137,16 +137,22 @@ falta en el Paso 7 para calcular cuánto ha durado la ejecución.
 
 Leer el Gmail de Íñigo en la misma ventana y cruzar lo que aparezca con las
 ofertas, por empresa y puesto. Clasificar cada hilo en **rechazo**, **avance**
-(siguiente prueba, convocatoria, «CV leído» o cambio de estado de portal,
-petición de documentación) o **acuse de recibo**, y descartar el ruido:
+(siguiente prueba, convocatoria, petición de documentación, mensaje de una
+persona) o **acuse de recibo** (incluidos «ha visto tu solicitud», «ha leído
+tu CV» y cambios de estado de portal sin más detalle: no son avances —
+5-oct-2026, inflaban la cuenta de avances), y descartar el ruido:
 alertas de Indeed, recordatorios/confirmaciones de envío de LinkedIn, altas en
 portales, avisos de GitHub.
 
 - Escribir la novedad más reciente de cada oferta en `correo/<id>`: `tipo`,
   `fecha`, `asunto`, `remitente`, `extracto` (**cita literal**; vacío antes que
   inventar) y `threadId`.
-- **No tocar la colección `estado`**: si hay un rechazo, la página lo sugiere y
-  la fase la cambia Íñigo.
+- **No tocar la colección `estado`**: si hay un rechazo, la página lo sugiere
+  (con botón de un clic en la ficha y un aviso en «Aplicadas») y la fase la
+  cambia Íñigo.
+- **Seguimientos**: decir en el resumen del Paso 8 qué procesos con persona al
+  otro lado (fase `respondida`/`entrevista`) llevan más de 7 días sin correo
+  nuevo. Proponer, no enviar.
 - Candidaturas cuya empresa no esté en `ofertas` van a `correo/_huerfanas`.
 - Si hay una convocatoria con fecha y hora, **no crear el evento de
   calendario**: proponerlo en el resumen del Paso 8.
@@ -203,8 +209,15 @@ tres campos.
 
 Notas por fuente:
 
-- **LinkedIn**: `f_TPR=r<horas*3600>&f_WT=2` (`horas` de `ventana.py`, remoto) más búsquedas por las
-  zonas locales sin `f_WT`, contra el endpoint de invitado
+- **LinkedIn**: las URLs del día salen de
+  `python pipeline/fuentes/linkedin.py consultas --config filtros.json --horas <horas>`
+  (remoto en Spain **más una búsqueda por cada zona de `areas_locales`**;
+  desde el 5-oct-2026, porque las locales se saltaban a mano el 30-sep y el
+  4-oct). Pedirlas **todas**, y las fichas **de una en una con `fetch`**, no
+  con `bulk_fetch` (lotes >10 dan 429 o fallan, visto 26-sep, 28-sep,
+  30-sep y 1-oct); ante un 429, esperar 3 s y reintentar hasta 3 veces antes
+  de darla por perdida. Las candidatas sin ficha **no se pierden**: se apuntan
+  en `fuentes_omitidas` con sus ids. Contra el endpoint de invitado
   (`jobs-guest/jobs/api/seeMoreJobPostings/search`), vía
   `ScraplingServer.fetch` (`real_chrome:true, disable_resources:true`). Partir
   el HTML por `<li>` y sacar campos con regex sobre
@@ -234,7 +247,10 @@ Notas por fuente:
   tecnologías sin recortar lo confunde con menciones a .NET en todas las
   ofertas.
 - **Tecnoempleo**: por WebFetch el parámetro `keywords=` se ignora; verificar
-  la fecha en la ficha, no en el listado.
+  la fecha en la ficha, no en el listado. Pasar al subagente la URL de
+  búsqueda exacta (`https://www.tecnoempleo.com/ofertas-trabajo/?te=<título>&pagina=N`,
+  una por título de `config/filtros`) en vez de dejarle navegar desde la
+  portada: el 5-oct sólo vio el home.
 - **Indeed**: MCP `search_jobs`/`get_job_details` (fecha absoluta de
   publicación). Devuelve mucha oferta antigua: filtrar por fecha con dureza.
 - **Manfred**: API JSON pública vía `ScraplingServer.make_request` — sin

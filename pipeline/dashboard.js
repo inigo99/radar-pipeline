@@ -971,13 +971,21 @@ function novDetalle(r){
   const link = c.threadId
     ? `<p style="margin-top:6px;font-size:12.5px"><a href="https://mail.google.com/mail/u/0/#all/${esc(c.threadId)}" target="_blank" rel="noopener">Abrir el hilo en Gmail &rarr;</a></p>` : '';
   const sug = (c.tipo==='rechazo' && e.fase!=='rechazada')
-    ? `<p class="note" style="margin-top:7px"><b>Sugerencia.</b> Este correo parece un rechazo. Si lo es, pon la fase en \u00abRechazada\u00bb y dejar\u00e1 de contar como proceso vivo.</p>` : '';
+    ? `<p class="note" style="margin-top:7px"><b>Sugerencia.</b> Este correo parece un rechazo. Si lo es, m\u00e1rcalo y dejar\u00e1 de contar como proceso vivo. <button class="btn" onclick="guardar('${esc(r.id)}',{estado:'aplicada',fase:'rechazada'})">Marcar como rechazada</button></p>` : '';
   return `<div class="dsec"><p class="dh">Novedad en el correo</p><div class="novbox">
     <p><span class="pill ${NOV_CLS[c.tipo]||'p-nov-acuse'}">${esc(NOV_ES[c.tipo]||c.tipo)}</span>
        <span class="pt">${esc(c.fecha||'')}${c.remitente?' \u00b7 '+esc(c.remitente):''}</span></p>
     <p style="margin-top:5px"><b>${esc(c.asunto||'')}</b></p>
     ${c.extracto?`<p class="note" style="margin-top:4px">${esc(c.extracto)}</p>`:''}
     ${link}${sug}</div></div>`;
+}
+function rechazosPendientesHTML(){
+  if(vista!=='aplicada') return '';
+  // rechazo en el correo y fase aún sin «rechazada»: el barrido no toca `estado`, así que se avisa aquí
+  const p = Object.keys(CORREO).filter(id => id!=='_huerfanas' && CORREO[id].tipo==='rechazo'
+    && st(id).estado==='aplicada' && st(id).fase!=='rechazada');
+  if(!p.length) return '';
+  return `<div class="huerf"><p><b>${p.length} candidatura${p.length===1?'':'s'} con un rechazo en el correo sin marcar.</b> <button class="btn" onclick="${p.map(id=>`guardar('${esc(id)}',{fase:'rechazada'})`).join(';')}">${p.length===1?'Marcarla como rechazada':'Marcar las '+p.length+' como rechazadas'}</button></p></div>`;
 }
 function huerfanasHTML(){
   if(vista!=='aplicada') return '';
@@ -1667,6 +1675,9 @@ function render(){
   renderHead();
   const rows = filtered();
   document.getElementById('count').textContent = `${rows.length} de ${DATA.length}`;
+  document.getElementById('aviso').innerHTML = (dbFallo
+    ? '<p class="offline">El almacenamiento compartido no está disponible en esta vista, así que lo que descartes o marques como aplicado se guarda solo en este navegador y no viajará a otros dispositivos.</p>'
+    : '') + rechazosPendientesHTML() + huerfanasHTML();
   const tb = document.getElementById('body');
   if(!rows.length){
     const msg = vista==='aplicada' ? 'Ninguna candidatura esperando respuesta. Las que marques como aplicadas salen aquí hasta que la empresa se mueva.'
@@ -1706,9 +1717,6 @@ function render(){
       ${accion}
     </tr>${det}`;
   }).join('');
-  document.getElementById('aviso').innerHTML = (dbFallo
-    ? '<p class="offline">El almacenamiento compartido no está disponible en esta vista, así que lo que descartes o marques como aplicado se guarda solo en este navegador y no viajará a otros dispositivos.</p>'
-    : '') + huerfanasHTML();
   bind();
 }
 

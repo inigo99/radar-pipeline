@@ -343,6 +343,21 @@ def test_filtrar_descarta_fuera_de_ventana_y_sin_fecha_no_acotada():
     assert len(ok) == 5 and not fuera
 
 
+def test_linkedin_ubicacion_pais_basta_sin_busqueda_remota():
+    txt = "<p>We build GenAI products. Python, LLMs.</p>"
+    sin_q = linkedin.detallar_una({"id": "3", "titulo": "GenAI", "empresa": "Minsait", "fecha": "", "ubicacion": "España"}, txt)
+    local = linkedin.detallar_una({"id": "4", "titulo": "GenAI", "empresa": "Minsait", "fecha": "", "ubicacion": "España", "q": "L|x"}, txt)
+    assert sin_q["modalidad"]["tipo"] == "remoto_sin_confirmar"
+    assert local["modalidad"]["tipo"] == "remoto_sin_confirmar"
+
+
+def test_linkedin_consultas_del_dia_incluye_zonas_locales():
+    cfg = {"titulos": ["Data Scientist"], "areas_locales": ["Navarra", "Gipuzkoa"]}
+    urls = [c["url"] for c in linkedin.consultas_del_dia(cfg, 24, 2)]
+    assert len(urls) == 4  # 2 páginas remoto + 1 por zona
+    assert any("Navarre" in u for u in urls) and any("Gipuzkoa" in u for u in urls)
+
+
 if __name__ == "__main__":
     import inspect
     mod = sys.modules[__name__]

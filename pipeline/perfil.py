@@ -113,6 +113,7 @@ TERMINOS_SKILL = {
     "powerbi": ("Power BI", "Power BI"),
     "prompt_engineering": ("Prompt engineering", "Prompt engineering"),
     "pyspark": ("PySpark", "PySpark"),
+    "pydantic": ("Pydantic", "Pydantic"),
     "python": ("Python", "Python"),
     "pytorch_tf": ("PyTorch/TensorFlow", "PyTorch/TensorFlow"),
     "r_lang": ("R", "R"),

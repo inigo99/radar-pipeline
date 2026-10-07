@@ -179,6 +179,7 @@ CV = json.dumps(dict(contacto=CONTACTO, bullets_es=BULLETS_ES, bullets_en=BULLET
                      skills_es=SKILLS_ES, skills_en=SKILLS_EN, orden=ORDEN,
                      orden_skills=ORDEN_SKILLS, labels=CV_LABELS,
                      tfm_variant=TFM_VARIANT, tfg_variant=TFG_VARIANT,
+                     proyectos_orden=_PERFIL_DOC.get("proyectos_orden") or {},
                      # Sólo para que `autoSkillsExtra()` (JS) pueda calcular
                      # `skills_extra` igual que `_skills_extra_auto()` en
                      # Python, cuando se añade una oferta a mano con "+ Oferta".

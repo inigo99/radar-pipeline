@@ -2144,6 +2144,17 @@ function cvBloques(r, FS){
   jt(L.v_tit); jl(L.v_loc);
   bl.push({items:vv.map(k=>B[k]), size:FS, f:'TR', mb:3*PX, just:true});
 
+  /* Proyectos de GitHub (7 oct 2026). Los textos viven en
+     `cv_labels.<idioma>.proy_items` (id -> texto) y cada familia saca dos, en
+     el orden de `proyectos_orden[familia]`: con los cuatro la letra bajaba de
+     10,5 a ~8,7 pt. Sin items, la sección no sale. */
+  const PI = L.proy_items || {};
+  const proy = ((CV.proyectos_orden||{})[fam] || Object.keys(PI).slice(0,2)).map(k=>PI[k]).filter(Boolean);
+  if(proy.length){
+    h2(L.proy);
+    bl.push({items:proy, size:FS, f:'TR', mb:3*PX, just:true});
+  }
+
   h2(L.form);
   jt(L.m_tit); jl(L.m_sub);
   /* Si el bullet de logro ya nombra la tesis, la línea del título sobra: decía
@@ -2161,8 +2172,8 @@ function cvBloques(r, FS){
   h2(L.skills);
   const SKX = skillsConExtra(SK_ALL, skCfg, r.skillsExtra);
   for(const s of skCfg.orden) bl.push({s:SKX[s], size:FS, f:'TR', mb:2*PX});
-  h2(L.lid);
-  bl.push({s:L.lid_txt, size:FS, f:'TR', mb:3.5*PX, just:true});
+  // «Liderazgo y comunicación» fuera del CV desde el 7 oct 2026 (decisión de
+  // Íñigo, para dejar sitio a Proyectos). `lid_txt` sigue en el perfil.
   h2(L.idi);
   bl.push({s:L.idi_txt, size:FS, f:'TR', mb:3.5*PX, just:true});
   return bl;

@@ -158,7 +158,7 @@ from datos import PERFIL as _PERFIL_DOC
 # estimado). Si esos ficheros cambian, el dashboard los recoge solo en la
 # siguiente publicación.
 from aprendizaje import PESO_FAMILIA, PESO_FAMILIA_DEFECTO, DIFICULTAD, DEFECTO as DIFICULTAD_DEFECTO
-from foco import SENIOR as _SENIOR_RE_FOCO, FRESCURA, PENALIZACION_SENIOR, BONUS_SALARIO_PUBLICADO
+from foco import SENIOR as _SENIOR_RE_FOCO, MID as _MID_RE, FRESCURA, PENALIZACION_SENIOR, BONUS_MID, BONUS_SALARIO_PUBLICADO
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vocabulario.md'), encoding='utf-8') as _fh:
     VOCABULARIO_MD = _fh.read()
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bandas.json'), encoding='utf-8') as _fh:
@@ -243,6 +243,8 @@ out = (TPL.replace("__DATA__", DATA).replace("__PERFIL__", PERFIL).replace("__CV
           .replace("__SENIOR_RE_FOCO__", json.dumps(_SENIOR_RE_FOCO.pattern, ensure_ascii=False))
           .replace("__FRESCURA__", json.dumps(FRESCURA, ensure_ascii=False))
           .replace("__PENALIZACION_SENIOR__", json.dumps(PENALIZACION_SENIOR))
+          .replace("__MID_RE__", json.dumps(_MID_RE.pattern, ensure_ascii=False))
+          .replace("__BONUS_MID__", json.dumps(BONUS_MID))
           .replace("__BONUS_SALARIO_PUBLICADO__", json.dumps(BONUS_SALARIO_PUBLICADO))
           .replace("__VOCABULARIO_MD__", json.dumps(VOCABULARIO_MD, ensure_ascii=False))
           .replace("__BANDAS__", BANDAS)

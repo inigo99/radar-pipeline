@@ -412,3 +412,10 @@ def test_idioma_de_la_descripcion():
     es = comun.norm("Buscamos un ingeniero de datos para el equipo de analítica, con experiencia en Python y en la nube.")
     assert comun.idioma(en) == "en"
     assert comun.idioma(es) == "es"
+
+
+def test_factor_nivel_prioriza_mid():
+    from pipeline.foco import factor_nivel, PENALIZACION_SENIOR, BONUS_MID
+    assert factor_nivel("Senior Data Engineer") == PENALIZACION_SENIOR
+    assert factor_nivel("Mid/Senior AI Engineer") == BONUS_MID
+    assert factor_nivel("Data Scientist") == 1.0

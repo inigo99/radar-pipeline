@@ -58,7 +58,7 @@ for (const o of ofertas) {
 console.log('paridad: peso de familia y foco');
 for (const r of resultado) {
   const peso = ev(`pesoFamilia(${JSON.stringify(r.familia)})`);
-  const prioridad = Math.round(r.score_adap * peso * 10) / 10;
+  const prioridad = Math.round(r.score_adap * peso * ev(`factorNivel(${JSON.stringify(r.puesto)})`) * 10) / 10;
   igual(r.prioridad, prioridad, `${r.id} prioridad`);
   const fc = ev(`calculaFoco(${JSON.stringify(r.puesto)}, ${JSON.stringify(r.publicada)}, ` +
                 `${JSON.stringify(r.sal_origen)}, ${prioridad})`);

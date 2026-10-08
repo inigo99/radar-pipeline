@@ -17,6 +17,8 @@ const DIFICULTAD_DEFECTO = __DIFICULTAD_DEFECTO__;
 const SENIOR_RE_FOCO = new RegExp(__SENIOR_RE_FOCO__, 'i');   // foco.py
 const FRESCURA = __FRESCURA__;                                 // foco.py
 const PENALIZACION_SENIOR = __PENALIZACION_SENIOR__;           // foco.py
+const MID_RE = new RegExp(__MID_RE__, 'i');                    // foco.py
+const BONUS_MID = __BONUS_MID__;                               // foco.py
 const BONUS_SALARIO_PUBLICADO = __BONUS_SALARIO_PUBLICADO__;   // foco.py
 const VOCABULARIO_MD = __VOCABULARIO_MD__;   // pipeline/vocabulario.md, para el prompt de extracción
 const BANDAS = __BANDAS__;                   // pipeline/bandas.json, para estimar salario
@@ -543,13 +545,19 @@ function frescura(dias){
 }
 /* Puerto de pipeline/foco.py: antigüedad y títulos de sénior restan sobre
    `prioridad`, nunca sobre `scoreAdap` -- ver la cabecera de ese fichero. */
+const esSenior = p => SENIOR_RE_FOCO.test(p||'') && !MID_RE.test(p||'');
+/* foco.factor_nivel(): la penalización sénior y el plus mid-level van en la
+   prioridad desde el 8-oct-2026 (orden de la tabla y, por herencia, «Hoy»). */
+function factorNivel(puesto){
+  if(MID_RE.test(puesto||'')) return BONUS_MID;
+  return esSenior(puesto) ? PENALIZACION_SENIOR : 1;
+}
 function calculaFoco(puesto, publicada, salOrigen, prioridad){
   const dias = diasDesde(publicada);
   const fr = frescura(dias);
   let factor = fr[0];
   const motivos = fr[1] ? [fr[1]] : [];
-  if(SENIOR_RE_FOCO.test(puesto||'')){
-    factor *= PENALIZACION_SENIOR;
+  if(esSenior(puesto)){   // ya restado en la prioridad
     motivos.push('el título pide un perfil sénior o de arquitecto');
   }
   if(salOrigen==='publicado'){
@@ -932,7 +940,7 @@ async function guardaNueva(){
   const punt = puntuarOferta(reqs, surfacedArr);
   const delta = Math.round((punt.scoreAdap-punt.scoreOrig)*10)/10;
   const mejora = punt.scoreOrig ? Math.round(1000*(punt.scoreAdap-punt.scoreOrig)/punt.scoreOrig)/10 : 0;
-  const prioridad = Math.round(punt.scoreAdap*pesoFamilia(familia)*10)/10;
+  const prioridad = Math.round(punt.scoreAdap*pesoFamilia(familia)*factorNivel(puesto)*10)/10;
   const fc = calculaFoco(puesto, publicada, salOrigen, prioridad);
   const brecha = brechaAprendizaje(reqs);
 
@@ -2770,7 +2778,7 @@ function refrescaFoco(){
   for(const r of DATA){
     const prioridad = (typeof r.prioridad === 'number' && isFinite(r.prioridad))
       ? r.prioridad
-      : Math.round(r.scoreAdap*pesoFamilia(r.familia)*10)/10;
+      : Math.round(r.scoreAdap*pesoFamilia(r.familia)*factorNivel(r.puesto)*10)/10;
     const fc = calculaFoco(r.puesto, r.publicada, r.salOrigen, prioridad);
     r.prioridad = prioridad;
     r.foco = fc.foco; r.dias = fc.dias; r.motivoFoco = fc.motivoFoco;

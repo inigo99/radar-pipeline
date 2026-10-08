@@ -40,7 +40,13 @@ FRESCURA = [(7, 1.00, ""),
             (21, 0.55, "publicada hace más de dos semanas"),
             (10 ** 6, 0.25, "publicada hace más de tres semanas: probablemente cerrada")]
 
+# Desde el 8-oct-2026 la penalización sénior y el plus mid-level van en la
+# `prioridad` (orden de la tabla), no sólo en el foco: Íñigo quiere las
+# mid-level por delante en todas partes. El foco hereda el efecto de la
+# prioridad, así que «Hoy» ordena igual que antes. «Mid/Senior» cuenta como mid.
+MID = re.compile(r"\b(mid|intermediate|semi[- ]?s[eé]nior|ssr)\b", re.I)
 PENALIZACION_SENIOR = 0.55
+BONUS_MID = 1.08
 BONUS_SALARIO_PUBLICADO = 1.06
 
 
@@ -63,7 +69,14 @@ def _frescura(dias):
 
 
 def es_senior(puesto):
-    return bool(SENIOR.search(puesto or ""))
+    return bool(SENIOR.search(puesto or "")) and not MID.search(puesto or "")
+
+
+def factor_nivel(puesto):
+    """Multiplica la prioridad: <1 sénior, >1 mid-level declarado, 1 el resto."""
+    if MID.search(puesto or ""):
+        return BONUS_MID
+    return PENALIZACION_SENIOR if es_senior(puesto) else 1.0
 
 
 def calcula(oferta, prioridad, hoy=None):
@@ -72,8 +85,7 @@ def calcula(oferta, prioridad, hoy=None):
     factor, nota_fecha = _frescura(dias)
     motivos = [nota_fecha] if nota_fecha else []
 
-    if es_senior(oferta.get("puesto", "")):
-        factor *= PENALIZACION_SENIOR
+    if es_senior(oferta.get("puesto", "")):   # ya restado en la prioridad
         motivos.append("el título pide un perfil sénior o de arquitecto")
 
     if oferta.get("sal_origen") == "publicado":

@@ -22,7 +22,7 @@ from ofertas import OFERTAS
 from perfil import ORIG, prominencia_adaptada
 from tailor import T
 from aprendizaje import peso_familia, clasifica
-from foco import calcula as calcula_foco
+from foco import calcula as calcula_foco, factor_nivel
 
 DATA = os.environ.get("RADAR_DATA", "data")
 
@@ -56,7 +56,7 @@ def puntuar(ofertas):
     for o in ofertas:
         so, sa, huecos, fuertes = score(o)
         familia = (T.get(o["id"]) or {}).get("familia", "backend")
-        prioridad = round(sa * peso_familia(familia), 1)
+        prioridad = round(sa * peso_familia(familia) * factor_nivel(o.get("puesto")), 1)
         foco, dias, motivo = calcula_foco(o, prioridad)
         res.append(dict(
             o,

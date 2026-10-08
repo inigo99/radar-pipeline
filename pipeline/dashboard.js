@@ -782,7 +782,7 @@ esta forma exacta:
 {
  "familia": "genai|ml|cv|ds|mlops|research|backend|general",
  "titular": "quién ES él, no el nombre del puesto del anuncio -- nunca copies ni adaptes ligeramente 'Puesto' de arriba (p.ej. si el puesto es 'Científico de datos', el titular NO puede ser 'Científico de Datos' ni nada que se le parezca). Es su identidad profesional para ESTA familia, en 2-4 palabras: 'Ingeniero de IA', 'Científico de Datos', 'Desarrollador Full Stack'... Si no se te ocurre algo mejor que encaje con la familia, usa 'Ingeniero Informático' (o 'Desarrollador Full Stack' si la familia es backend/general y encaja más). NUNCA 'Senior'/'Sénior'/'Sr.' aunque el puesto lo lleve",
- "resumen": "2-3 frases, máximo 240 caracteres, en el idioma de la oferta: quién es, el logro que conecta con esta oferta y opcionalmente las tecnologías clave",
+ "resumen": "2-3 frases, máximo 240 caracteres, en el idioma de la oferta y en primera persona: quién es y el logro que conecta con esta oferta, SIN lista de tecnologías al final; 2,5 años en Orisha Commerce, nunca tres",
  "skills_extra": "0 a 4 términos que SÍ tiene y la variante de su familia no saca, separados por coma, o cadena vacía",
  "reqs": [["clave_de_vocabulario", peso_1_a_10, "etiqueta con las palabras del anuncio"], "..."],
  "surfaced": ["claves de reqs que el resumen/titular sacan a relucir -- SOLO si tiene evidencia > 0 en el PERFIL"],
@@ -2243,8 +2243,12 @@ function skillsConExtra(SK_ALL, skCfg, extra){
       const c = Object.keys(cats).find(k=>normTxt(cats[k]).includes(n));
       if(c){ cat = c; if(orden.includes(c)) break; }
     }
-    if(!cat || !orden.includes(cat)){
-      const alt = (FALLBACK_CAT[cat||'tools']||[]).concat(['tools']).find(c=>orden.includes(c));
+    /* Si no sale en ninguna variante va a «Herramientas». Antes caía en
+       FALLBACK_CAT.tools, cuyo primer destino es «dev»/«ia»: así acababan
+       «AI / ML: Azure, C/C++…» (revisión del 8 oct 2026). */
+    if(!cat) cat = 'tools';
+    if(!orden.includes(cat)){
+      const alt = (FALLBACK_CAT[cat]||[]).concat(['tools']).find(c=>orden.includes(c));
       cat = alt || orden[orden.length-1];
     }
     (destino[cat] = destino[cat] || []).push(t);
@@ -2258,6 +2262,16 @@ function skillsConExtra(SK_ALL, skCfg, extra){
 }
 
 const fechasAscii = t => String(t||'').replace(/\s*[\u2013\u2014]\s*/g, ' - ');
+/* Titular en español dentro de un CV en inglés («Ingeniero Backend»): el
+   candado de idioma de generarCV() mira titular y resumen juntos y el resumen
+   manda, así que no lo veía. En inglés, un rol en español se cambia por el
+   genérico de la familia. Al revés no: «Data Engineer» en un CV en español es
+   lo normal. */
+const ROL_ES = /\b(ingenier[oa]|desarrollador[a]?|cient[ií]fic[oa]|investigador[a]?|analista|arquitect[oa])\b/i;
+function titularCV(r, fam){
+  return (r.idioma==='en' && ROL_ES.test(r.titular||'')) ? tituloPorDefecto(fam, 'en') : r.titular;
+}
+
 function cvBloques(r, FS){
   const idi = r.idioma==='en' ? 'en' : 'es';
   const L  = CV.labels[idi];
@@ -2280,11 +2294,11 @@ function cvBloques(r, FS){
   const jl = t => bl.push({s:fechasAscii(t), size:8.8, f:'TI', mb:3*PX, rgb:[0.33,0.33,0.33]});
 
   bl.push({s:nombre, size:15.5, f:'TB', mb:1*PX});
-  bl.push({s:r.titular, size:10.4, f:'TR', mb:3*PX});
+  bl.push({s:titularCV(r, fam), size:10.4, f:'TR', mb:3*PX});
   const contacto = [ciudad,CV.contacto.tel,CV.contacto.email,CV.contacto.linkedin];
   if(CV.contacto.github) contacto.push(CV.contacto.github);   // vacío hasta que haya repos que enseñar
   bl.push({s:contacto.join(' · '),
-           size:8.7, f:'TR', mb:6*PX, regla:{pt:5*PX, rgb:[0.73,0.73,0.73], ancho:0.75}});
+           size:9.2, f:'TR', mb:6*PX, regla:{pt:5*PX, rgb:[0.73,0.73,0.73], ancho:0.75}});
 
   h2(L.resumen);
   bl.push({s:r.resumen, size:FS, f:'TR', mb:3.5*PX, just:true});
@@ -2312,17 +2326,17 @@ function cvBloques(r, FS){
      dos veces lo mismo y se comía una línea de cada dos. Se mira sobre el texto
      del propio bullet para que siga valiendo si algún día se reescribe. */
   const nombraTesis = t => /\bTFM\b|\bTFG\b|Trabajo de Fin|Master'?s Thesis|Bachelor'?s Thesis/i.test(t||'');
-  if(!nombraTesis(tfmB)) bl.push({s:L.m_tfm, size:8.8, f:'TR', mb:1.5*PX, just:true});
-  bl.push({items:[tfmB], size:8.8, f:'TR', mb:3.5*PX, just:true});
+  if(!nombraTesis(tfmB)) bl.push({s:L.m_tfm, size:FS, f:'TR', mb:1.5*PX});
+  bl.push({items:[tfmB], size:FS, f:'TR', mb:3.5*PX});
   jt(L.g_tit); jl(L.g_sub);
-  if(!nombraTesis(tfgB)) bl.push({s:L.g_tfg, size:8.8, f:'TR', mb:1.5*PX, just:true});
-  bl.push({items:[tfgB], size:8.8, f:'TR', mb:3.5*PX, just:true});
+  if(!nombraTesis(tfgB)) bl.push({s:L.g_tfg, size:FS, f:'TR', mb:1.5*PX});
+  bl.push({items:[tfgB], size:FS, f:'TR', mb:3.5*PX});
   jt(L.compl, 9.4);
-  bl.push({items:L.compl_items, size:8.8, f:'TR', mt:0, mb:3*PX});
+  bl.push({items:L.compl_items, size:FS, f:'TR', mt:0, mb:3*PX});
 
   h2(L.skills);
   const SKX = skillsConExtra(SK_ALL, skCfg, r.skillsExtra);
-  for(const s of skCfg.orden) bl.push({s:SKX[s], size:FS, f:'TR', mb:2*PX});
+  for(const s of skCfg.orden) bl.push({s:SKX[s], size:FS, f:'TR', mb:2*PX, etiq:true});
   // «Liderazgo y comunicación» fuera del CV desde el 7 oct 2026 (decisión de
   // Íñigo, para dejar sitio a Proyectos). `lid_txt` sigue en el perfil.
   h2(L.idi);
@@ -2331,13 +2345,10 @@ function cvBloques(r, FS){
 }
 
 function cvLinea(l, b, x, y, maxW){
-  const it={s:l.s, size:b.size, f:b.f, x, y, rgb:b.rgb, tc:b.tc||0};
-  if(b.just && !l.fin){
-    const n=(l.s.match(/ /g)||[]).length;
-    const hueco=maxW-anchoTexto(l.s,b.size,b.f,b.tc||0);
-    if(n>0 && hueco>0 && hueco < maxW*0.25) it.tw=hueco/n;
-  }
-  return it;
+  /* Alineado a la izquierda desde el 8 oct 2026: el justificado dejaba «ríos»
+     y, al extraer el texto (lo que lee un ATS), espacios dobles. `just` en los
+     bloques ya no hace nada. */
+  return {s:l.s, size:b.size, f:b.f, x, y, rgb:b.rgb, tc:b.tc||0};
 }
 
 function cvDisponer(bl, medir){
@@ -2356,6 +2367,19 @@ function cvDisponer(bl, medir){
           items.push(cvLinea(l,b,CV_PADX+sangria,y,maxW-sangria));
         });
       }
+    }else if(b.etiq && b.s.indexOf(': ')>0){
+      /* «Etiqueta: términos», con la etiqueta en negrita. Se envuelve con el
+         ancho que roba la negrita para que la primera línea no se salga. */
+      const i = b.s.indexOf(': ')+1, lab = b.s.slice(0,i), fb = 'TB';
+      const extra = anchoTexto(lab,b.size,fb,0)-anchoTexto(lab,b.size,b.f,0);
+      envolver(b.s,b.size,b.f,maxW-extra,0).forEach((l,k)=>{
+        y -= b.size*CV_LH;
+        if(medir) return;
+        if(k===0){
+          items.push({s:lab, size:b.size, f:fb, x:CV_PADX, y});
+          items.push({s:l.s.slice(i), size:b.size, f:b.f, x:CV_PADX+anchoTexto(lab,b.size,fb,0), y});
+        }else items.push(cvLinea(l,b,CV_PADX,y,maxW));
+      });
     }else{
       for(const l of envolver(b.s,b.size,b.f,maxW,b.tc||0)){
         y -= b.size*CV_LH;

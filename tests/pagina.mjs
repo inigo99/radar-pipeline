@@ -33,6 +33,19 @@ for (const id of ids) {
   fs.writeFileSync(path.join(salida, `${id}.pdf`), Buffer.from(bytes));
 }
 
+/* Revisión del CV del 8 oct 2026: lo que un reclutador o un ATS pillaría. */
+const malos = ev(`DATA.filter(r=>{
+  const t = cvBloques(r, 9.6).map(b=>b.s||'').join('\\n');
+  return (r.idioma==='en' && ROL_ES.test(cvBloques(r,9.6)[1].s))
+      || /Production deployment|Despliegue en producción|Observab|Data governance|Gobierno del dato/.test(t)
+      || t.split('\\n').some(l => (l.match(/\\d{4} - /g)||[]).length > 1);
+}).map(r=>r.id)`);
+ok(malos.length === 0, `CV: titular en su idioma, sin skills genéricas, un rango de fechas por línea (${malos.slice(0,5).join(', ')})`);
+ok(ev(`skillsConExtra({v:{ia:'AI / ML: LLMs', tools:'Tools: PyTorch'}}, {variante:'v', orden:['ia','tools']}, 'Azure').tools.includes('Azure')`),
+   'una skill que no sale en ninguna variante va a «Herramientas», no a «AI / ML»');
+ok(ev(`DATA.slice(0,20).every(r=>cvDisponer(cvBloques(r,9.6),false).items.every(i=>!i.tw))`),
+   'CV alineado a la izquierda (sin espaciado de justificado)');
+
 console.log('página: seguimiento');
 const [a, b, c] = ids;
 const viejo = '2026-01-01';

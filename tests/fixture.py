@@ -71,7 +71,9 @@ FAMILIAS = {"li-2001": "genai", "ij-3002abcd1234": "ds",
 
 TAILOR = {o["id"]: dict(familia=FAMILIAS[o["id"]],
                         titular="Senior AI Engineer" if o["id"] == "li-2001" else "",
-                        resumen="Resumen adaptado de prueba, corto y sin cifras nuevas.",
+                        resumen=("Adapted test summary, short and with no new figures."
+                                 if o["idioma"] == "en" else
+                                 "Resumen adaptado de prueba, corto y sin cifras nuevas."),
                         skills_extra="")
           for o in OFERTAS}
 
@@ -83,7 +85,7 @@ PERFIL = dict(
     contacto=dict(nombre_es="Nombre Apellido", nombre_en="Nombre Apellido",
                   titulo_es="Ingeniero de software", titulo_en="Software engineer",
                   email="correo@ejemplo.test", tel="+34 600 000 000",
-                  linkedin="linkedin.com/in/ejemplo",
+                  linkedin="linkedin.com/in/ejemplo", github="github.com/inigo99",
                   ciudad_es="Ciudad", ciudad_en="City",
                   ubicacion="Ciudad, País"),
     # "apis_rest" y "computer_vision" llevan evidencia 1,0 (demostrado) más
@@ -126,7 +128,9 @@ PERFIL = dict(
     orden_skills={f: dict(variante="base", orden=["Lenguajes", "IA / Datos", "Infraestructura"])
                   for f in ("genai", "ml", "cv", "ds", "backend", "general")},
     cv_labels={"es": {}, "en": {}},
-    perfil_llm=dict(experiencia=[
+    perfil_llm=dict(proyectos=[dict(nombre="boe-extractor", url="github.com/ejemplo/boe-extractor",
+                                    texto="Proyecto de prueba.")],
+                    experiencia=[
         dict(puesto="Desarrollador de software", empresa="Empresa Uno",
              fechas="septiembre 2023 – marzo 2026", bullets=["empleo1"],
              logros=["Reduje un 38 % el tiempo de carga del catálogo."]),

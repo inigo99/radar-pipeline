@@ -310,8 +310,13 @@ titular y resumen; sin `carta` ni `skills_extra`).
   ofertas con el resumen en el otro idioma y el CV salía mezclado; el
   dashboard ya lo traduce al generar el CV, pero mejor que no llegue).
 - **`titular` y `resumen` son lo único del CV que se adapta a la oferta.**
-  `resumen`: 2-3 frases, **máximo 240 caracteres** — quién es, el logro que
-  conecta con la oferta y, opcionalmente, las tecnologías clave. Las ofertas
+  `resumen`: 2-3 frases, **máximo 240 caracteres**, en primera persona y con
+  tildes — quién es y el logro que conecta con la oferta. **Sin lista de
+  tecnologías al final** (ya salen en Competencias técnicas y en
+  `skills_extra`, que se calcula solo) y nunca una tecnología que no esté en
+  su evidencia (el 8-oct-2026 habían salido así «Terraform», «Spring Boot» o
+  «Golang»). Experiencia: **2,5 años en Orisha Commerce**, nunca «tres
+  años» (48 resúmenes lo decían). Las ofertas
   anteriores al 10-sep-2026 llevan resúmenes más largos: no se reescriben en
   bloque, sólo las nuevas salen cortas.
 - **Nunca «Senior»/«Sénior»/«Sr.» en el `titular`**, aunque el anuncio lo

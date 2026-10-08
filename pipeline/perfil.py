@@ -38,6 +38,9 @@ def prominencia_adaptada(term, usados):
 # `liderazgo`, `poc_negocio`, `fullstack`, `SaaS`, `erp_producto`). Añadirlas
 # haría que casi cualquier oferta sacara la misma línea genérica ("Inglés C1",
 # "Full Stack"...) en vez de la tecnología concreta que la oferta señala.
+# Tampoco conceptos genéricos que no son una tecnología («Despliegue en
+# producción», «Observabilidad», «Gobierno del dato»): en la fila de skills
+# suenan a relleno para un reclutador (revisión del 8 oct 2026).
 TERMINOS_SKILL = {
     "CUDA": ("CUDA", "CUDA"),
     "ab_testing": ("A/B testing", "A/B testing"),
@@ -56,13 +59,11 @@ TERMINOS_SKILL = {
     "css": ("CSS", "CSS"),
     "cuDF": ("cuDF", "cuDF"),
     "cuantizacion": ("Cuantización de modelos", "Model quantization"),
-    "data_governance": ("Gobierno del dato", "Data governance"),
     "data_preprocessing": ("Preprocesamiento de datos", "Data preprocessing"),
     "databricks": ("Databricks", "Databricks"),
     "dbt": ("dbt", "dbt"),
     "debugging": ("Debugging", "Debugging"),
     "deep_learning": ("Deep Learning", "Deep learning"),
-    "despliegue_produccion": ("Despliegue en producción", "Production deployment"),
     "docker": ("Docker", "Docker"),
     "documentacion": ("Documentación técnica", "Technical documentation"),
     "embeddings_semantic_search": ("Embeddings y búsqueda semántica", "Embeddings & semantic search"),
@@ -105,7 +106,6 @@ TERMINOS_SKILL = {
     "nlp": ("NLP", "NLP"),
     "nodejs": ("Node.js", "Node.js"),
     "numpy_pandas": ("NumPy/Pandas", "NumPy/Pandas"),
-    "observability": ("Observabilidad", "Observability"),
     "ocr": ("OCR", "OCR"),
     "opencv": ("OpenCV", "OpenCV"),
     "patrones_diseno": ("Patrones de diseño (SOLID)", "Design patterns (SOLID)"),

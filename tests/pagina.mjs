@@ -45,6 +45,8 @@ ok(ev(`skillsConExtra({v:{ia:'AI / ML: LLMs', tools:'Tools: PyTorch'}}, {variant
    'una skill que no sale en ninguna variante va a «Herramientas», no a «AI / ML»');
 ok(ev(`skillsConExtra({v:{dev:'Development: React', tools:'Tools: Jira'}}, {variante:'v', orden:['dev','tools']}, 'Angular').dev.includes('Angular')`),
    'Angular, cuando la oferta lo pide, va a «Desarrollo»');
+ok(ev(`skillsConExtra({v:{leng:'Languages: Python', tools:'Tools: Jira'}}, {variante:'v', orden:['leng','tools']}, 'PHP').leng.includes('PHP')`),
+   'PHP va a «Lenguajes»');
 ok(ev(`DATA.slice(0,20).every(r=>cvDisponer(cvBloques(r,9.6),false).items.every(i=>!i.tw))`),
    'CV alineado a la izquierda (sin espaciado de justificado)');
 

@@ -16,6 +16,23 @@ def norm(s):
     return s.lower()
 
 
+# Idioma de la descripción, por palabras vacías (8-oct-2026). La ficha de
+# LinkedIn trae la interfaz en español («hace 14 horas», «solicitudes») y el
+# agente marcaba `idioma: es` ofertas escritas en inglés; el CV salía con
+# etiquetas en español y el resumen en inglés. Primo de `idiomaTexto()`
+# en dashboard.js (sin acentos, porque aquí el texto ya viene normalizado).
+_VACIAS_ES = set("de la el los las en con para por que y una un del al se su sus como mas".split())
+_VACIAS_EN = set("the and of to with for in on by an from as at is who".split())
+
+
+def idioma(tn):
+    """'es' | 'en' de un texto ya normalizado. Empate o vacío -> 'es'."""
+    w = re.findall(r"[a-z']+", tn or "")
+    es = sum(x in _VACIAS_ES for x in w)
+    en = sum(x in _VACIAS_EN for x in w)
+    return "en" if en > es else "es"
+
+
 _RE_TAGS_BLOQUE = re.compile(r"</(p|li|div|h\d|tr)>", re.I)
 _RE_BR = re.compile(r"<br\s*/?>", re.I)
 _RE_SCRIPT = re.compile(r"<script[\s\S]*?</script>", re.I)

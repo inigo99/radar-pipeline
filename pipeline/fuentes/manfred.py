@@ -159,6 +159,7 @@ def detallar_una(oferta_listado, ficha_json):
         "publicada": (oferta_listado.get("updatedAt") or "")[:10],
         "idiomas": ",".join(f'{l.get("name")}:{l.get("level")}' for l in (j.get("languages") or [])),
         "anios": comun.anios(comun.norm(ask)),
+        "idioma": comun.idioma(comun.norm(ask + " " + _strip_html(j.get("responsibilities") or j.get("whatWillYouDo") or ""))),
         "idiomas_exigidos": comun.idiomas_exigidos(comun.norm(ask)),
         "_ask": ask,
         "_resp": _strip_html(j.get("responsibilities") or j.get("whatWillYouDo") or ""),

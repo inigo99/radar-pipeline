@@ -404,3 +404,11 @@ if __name__ == "__main__":
             print(f"ERROR {name}: {type(e).__name__}: {e}")
     print(f"\n{ok} ok, {fail} fallidos de {len(tests)}")
     sys.exit(1 if fail else 0)
+
+
+def test_idioma_de_la_descripcion():
+    # La interfaz de LinkedIn en español no cuela una oferta escrita en inglés.
+    en = comun.norm("Hace 14 horas · 50 solicitudes. We are looking for a Data Engineer to join the team and work with Python in the cloud.")
+    es = comun.norm("Buscamos un ingeniero de datos para el equipo de analítica, con experiencia en Python y en la nube.")
+    assert comun.idioma(en) == "en"
+    assert comun.idioma(es) == "es"

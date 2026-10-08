@@ -303,6 +303,12 @@ el dashboard en el navegador.
 Cada oferta nueva necesita su entrada en `ofertas` **y** en `tailor` (familia,
 titular y resumen; sin `carta` ni `skills_extra`).
 
+- **`idioma` es el de la descripción, no el de la página**: copiar el campo
+  `idioma` que devuelve `detallar_una` (LinkedIn/InfoJobs/Manfred); la ficha
+  de LinkedIn trae la interfaz en español aunque la oferta esté en inglés.
+  **`titular` y `resumen` van en ese mismo idioma** (el 8-oct-2026 había 44
+  ofertas con el resumen en el otro idioma y el CV salía mezclado; el
+  dashboard ya lo traduce al generar el CV, pero mejor que no llegue).
 - **`titular` y `resumen` son lo único del CV que se adapta a la oferta.**
   `resumen`: 2-3 frases, **máximo 240 caracteres** — quién es, el logro que
   conecta con la oferta y, opcionalmente, las tecnologías clave. Las ofertas

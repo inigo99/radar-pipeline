@@ -109,6 +109,7 @@ def detallar_una(oferta, html_ficha):
         "titulo": comun.texto(m_h1.group(1)) if m_h1 else "",
         "salario": (m_sal.group(0).strip() if m_sal else ""),
         "anios": comun.anios(comun.norm(todo)),
+        "idioma": comun.idioma(dn),
         "idiomas_exigidos": comun.idiomas_exigidos(dn),
         "etiqueta": (m_etq.group(0) if m_etq else ""),
         "publicado": (m_pub.group(0) if m_pub else ""),

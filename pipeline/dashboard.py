@@ -38,9 +38,19 @@ _TITULO_DEFECTO = {
     'mlops': 'Ingeniero MLOps', 'research': 'Ingeniero de IA',
     'backend': 'Desarrollador Full Stack', 'general': 'Ingeniero Informático',
 }
+# En inglés para las ofertas en inglés (8 oct 2026): antes salía «Ingeniero de
+# Datos» encima de un CV entero en inglés.
+_TITULO_DEFECTO_EN = {
+    'genai': 'AI Engineer', 'ml': 'Machine Learning Engineer',
+    'cv': 'Computer Vision Engineer', 'ds': 'Data Scientist',
+    'mlops': 'MLOps Engineer', 'research': 'AI Engineer',
+    'backend': 'Full Stack Developer', 'general': 'Computer Engineer',
+}
 
 
-def _titulo_por_defecto(familia):
+def _titulo_por_defecto(familia, idioma='es'):
+    if idioma == 'en':
+        return _TITULO_DEFECTO_EN.get(familia, 'Computer Engineer')
     return _TITULO_DEFECTO.get(familia, 'Ingeniero Informático')
 
 
@@ -114,7 +124,7 @@ for r in RES:
       salBase=r['sal_base'], url=r['url'], scoreOrig=r['score_orig'], scoreAdap=r['score_adap'],
       delta=r['delta'], mejora=r['mejora_pct'], fuertes=r['fuertes'], huecos=r['huecos'],
       alerta=r.get('alerta',''),
-      titular=_limpia_titular(T[r['id']]['titular']) or _titulo_por_defecto(T[r['id']]['familia']),
+      titular=_limpia_titular(T[r['id']]['titular']) or _titulo_por_defecto(T[r['id']]['familia'], r['idioma']),
       resumen=T[r['id']]['resumen'], familia=_familia,
       skillsExtra=_skills_manual or _skills_extra_auto(r['reqs'], _familia, r['idioma']),
       reqs=[f"{l} (peso {w})" for _,w,l in sorted(r['reqs'], key=lambda x:-x[1])[:12]],
@@ -167,6 +177,7 @@ LINT = _informe_lint(_PERFIL_DOC)
 LINT_JS = json.dumps(LINT, ensure_ascii=False, separators=(',', ':'))
 _pl = dict(PERFIL_LLM)
 _pl["tel"], _pl["email"], _pl["linkedin"] = CONTACTO["tel"], CONTACTO["email"], CONTACTO["linkedin"]
+_pl["github"] = CONTACTO.get("github", "")   # los proyectos van en perfil_llm.proyectos
 _pl["experiencia"] = [
     {k: v for k, v in e.items() if k != "bullets"} |
     {"logros_es": [BULLETS_ES[b] for b in e["bullets"]],

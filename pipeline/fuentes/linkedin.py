@@ -165,6 +165,7 @@ def detallar_una(job, html_ficha):
         "ambito": comun.ambito(tn),
         "salario": comun.salario(txt),
         "anios": comun.anios(tn),
+        "idioma": comun.idioma(tn),
         "idiomas_exigidos": comun.idiomas_exigidos(tn),
         "largo": len(txt),
         "terminos": vocabulario.cuenta_terminos(tn),

@@ -491,8 +491,29 @@ const TITULO_DEFECTO = {
   ds:'Científico de Datos', mlops:'Ingeniero MLOps', research:'Ingeniero de IA',
   backend:'Desarrollador Full Stack', general:'Ingeniero Informático'
 };
-function tituloPorDefecto(familia){
+const TITULO_DEFECTO_EN = {
+  genai:'AI Engineer', ml:'Machine Learning Engineer', cv:'Computer Vision Engineer',
+  ds:'Data Scientist', mlops:'MLOps Engineer', research:'AI Engineer',
+  backend:'Full Stack Developer', general:'Computer Engineer'
+};
+function tituloPorDefecto(familia, idioma){
+  if(idioma==='en') return TITULO_DEFECTO_EN[familia] || 'Computer Engineer';
   return TITULO_DEFECTO[familia] || 'Ingeniero Informático';
+}
+
+/* Idioma de un texto por palabras vacías ('es' | 'en' | null si no está
+   claro). Basta para pillar un resumen entero en el otro idioma, que es lo que
+   pasaba (8 oct 2026: 44 ofertas con titular/resumen en el idioma contrario). */
+const _VACIAS = {
+  es: new Set('de la el los las en con para por que y una un del al se su sus como más ingeniero desarrollador datos'.split(' ')),
+  en: new Set('the and of to with for in on by an from as at is who engineer developer data'.split(' '))
+};
+function idiomaTexto(t){
+  const w = String(t||'').toLowerCase().match(/[a-záéíóúñü']+/g) || [];
+  const es = w.filter(x=>_VACIAS.es.has(x)).length, en = w.filter(x=>_VACIAS.en.has(x)).length;
+  if(es >= 2 && es > en*1.5) return 'es';
+  if(en >= 2 && en > es*1.5) return 'en';
+  return null;
 }
 
 function pesoFamilia(familia){
@@ -703,7 +724,7 @@ async function cambiaIdioma(id, idioma){
   }catch(e){ t=null; }
   delete IDI_TRADUCIENDO[id];
   if(!t || !t.titular || !t.resumen){ render(); toast('No se ha podido traducir el titular y el resumen; inténtalo de nuevo'); return; }
-  const doc = {idioma, titular:limpiaTitular(String(t.titular).slice(0,120)) || tituloPorDefecto(r.familia),
+  const doc = {idioma, titular:limpiaTitular(String(t.titular).slice(0,120)) || tituloPorDefecto(r.familia, idioma),
                resumen:String(t.resumen).slice(0,320), actualizado:new Date().toISOString()};
   IDIOMA[id]=doc; aplicaIdiomas(); render();
   if(db){
@@ -881,7 +902,7 @@ async function guardaNueva(){
   const familia = FAMILIA_ES[extra.familia] ? extra.familia : 'general';
   // Nunca cae de vuelta en `puesto` (el nombre del puesto del anuncio): un
   // titular no puede ser una copia de cómo la empresa llama a la vacante.
-  const titular = limpiaTitular(String(extra.titular||'').slice(0,120)) || tituloPorDefecto(familia);
+  const titular = limpiaTitular(String(extra.titular||'').slice(0,120)) || tituloPorDefecto(familia, idioma);
   const resumen = String(extra.resumen||'').slice(0,320);
   const reqsBrutos = Array.isArray(extra.reqs) ? extra.reqs
     .filter(x=>Array.isArray(x) && x.length>=3 && x[0] && x[2])
@@ -1044,7 +1065,7 @@ function promptPostCandidatura(r, kind){
   const ctx = `${REGLAS}
 
 PERFIL (datos reales, no salgas de aquí):
-${JSON.stringify(PERFIL)}
+${JSON.stringify(PERFIL)}${kind==='entrevista' ? bancoTxt('') : ''}
 
 OFERTA:
 ${ofertaTxt(r)}
@@ -1233,7 +1254,7 @@ function prompt(r, kind){
   return `${REGLAS}
 
 PERFIL (datos reales, no salgas de aquí):
-${JSON.stringify(PERFIL)}
+${JSON.stringify(PERFIL)}${bancoTxt('')}
 
 OFERTA:
 ${ofertaTxt(r)}
@@ -1268,6 +1289,7 @@ function numerosPermitidos(r){
   // Lo que la oferta le dio de contexto es material legítimo: su banda
   // salarial, los años que pide, las cifras de sus propios requisitos.
   const n = new Set(_NUMS_PERFIL);
+  bancoEntradas('').forEach(e=>(e.texto.match(/\d[\d.,]*/g)||[]).forEach(x=>n.add(_canonNum(x))));
   (String(ofertaTxt(r)).match(/\d[\d.,]*/g)||[]).forEach(x=>n.add(_canonNum(x)));
   return n;
 }
@@ -1425,6 +1447,24 @@ function hash4(s){
 }
 const slugPregunta = q => (slug(q).toLowerCase().slice(0,34) || 'pregunta') + '_' + hash4(String(q));
 
+/* El banco entero como contexto (8 oct 2026): lo que ya ha contado en otros
+   formularios lo escribió o revisó él, así que vale como dato suyo para el
+   chat, la carta, el correo y la entrevista. Fuera los que dejan algo
+   [pendiente] y, en el chat, los de la propia oferta (ya van en el historial). */
+function bancoEntradas(excluir){
+  return Object.values(BANCO)
+    .filter(e => e && e.texto && e.oferta !== excluir && !/\[pendiente/i.test(e.texto))
+    .sort((a,b) => String(b.guardado||'').localeCompare(String(a.guardado||'')))
+    .slice(0, 40);   // ponytail: las 40 más recientes; resumir por temas si el banco crece mucho más
+}
+function bancoTxt(excluir){
+  const e = bancoEntradas(excluir);
+  return e.length
+    ? `\n\nLO QUE YA HA RESPONDIDO EN OTROS FORMULARIOS (lo escribió o revisó él: son datos suyos igual que el PERFIL y puedes usarlos para ampliar; no arrastres el nombre de otra empresa):\n`
+      + e.map(x=>`- «${x.pregunta}»: ${x.texto}`).join('\n')
+    : '';
+}
+
 function promptChat(r, pregunta, historial, precedentes){
   const idioma = r.idioma==='es' ? 'español' : 'inglés';
   const L = lim(r.id);
@@ -1445,7 +1485,7 @@ function promptChat(r, pregunta, historial, precedentes){
   return `${REGLAS}
 
 PERFIL (datos reales, no salgas de aquí):
-${JSON.stringify(PERFIL)}
+${JSON.stringify(PERFIL)}${bancoTxt(r.id)}
 
 OFERTA A LA QUE SE PRESENTA:
 ${ofertaTxt(r)}${prec}${hist}
@@ -2336,6 +2376,10 @@ function nombreCV(r){ return 'CV_'+slug(r.empresa)+'__'+slug(r.puesto)+'.pdf'; }
 
 async function generarCV(id){
   const r=DATA.find(x=>x.id===id); if(!r) return;
+  /* Candado de idioma: si el titular y el resumen están en el otro idioma, se
+     traducen antes (y se guardan en `idioma/<id>`, como con el selector). */
+  const dice = idiomaTexto(r.titular+'. '+r.resumen);
+  if(dice && dice!==r.idioma){ toast('Pasando titular y resumen al idioma de la oferta…'); await cambiaIdioma(id, r.idioma); }
   let bytes;
   try{ bytes=pdfCV(r); }
   catch(e){ toast('No se ha podido construir el CV'); return; }

@@ -263,6 +263,67 @@ def anios(texto_norm):
     return m.group(0).strip() if m else ""
 
 
+# ---- Idiomas exigidos (8-oct-2026, portado de la «Language Gate» de
+# github.com/MadsLorentzen/ai-job-search) -------------------------------------
+# Sólo cuenta un idioma si en la MISMA cláusula hay una señal de exigencia
+# (nivel o «required/imprescindible») y ninguna de opcional («valorable», «nice
+# to have», «a plus»). «German customers» o «oficinas en Francia» no cuentan.
+# El veredicto (filtrar o avisar) lo da `filtrar.py` contra los idiomas del perfil.
+IDIOMAS = {
+    "aleman": r"german|aleman|deutsch", "frances": r"french|frances|francais",
+    "italiano": r"italian|italiano", "portugues": r"portuguese|portugues",
+    "neerlandes": r"dutch|neerlandes|holandes|flemish", "polaco": r"polish|polaco",
+    "catalan": r"catalan|catala", "euskera": r"euskera|basque|euskara",
+    "gallego": r"galician|gallego", "sueco": r"swedish|sueco", "danes": r"danish|danes",
+    "noruego": r"norwegian|noruego", "finlandes": r"finnish|finlandes",
+    "ruso": r"russian|ruso", "chino": r"chinese|mandarin|chino", "japones": r"japanese|japones",
+    "arabe": r"arabic|arabe", "checo": r"czech|checo", "turco": r"turkish|turco",
+    "rumano": r"romanian|rumano", "hungaro": r"hungarian|hungaro", "griego": r"greek|griego",
+    "hebreo": r"hebrew|hebreo", "coreano": r"korean|coreano",
+    "ingles": r"english|ingles", "espanol": r"spanish|espanol|castellano",
+}
+_RE_IDIOMA = re.compile(r"\b(?:" + "|".join(f"(?P<{k}>{v})" for k, v in IDIOMAS.items()) + r")\b")
+# Nivel numérico: A1=1 … C2=6, nativo=6.
+_NIVELES = [
+    (r"\b(native|nativo|mother tongue|lengua materna|bilingual|bilingue|c2)\b", 6),
+    (r"\b(fluent|fluency|fluido|fluidez|fluently|dominio|proficient|proficiency|advanced|avanzado|nivel alto|c1)\b", 5),
+    (r"\b(business|professional|profesional|upper[- ]intermediate|b2)\b", 4),
+    (r"\b(intermediate|intermedio|conversational|b1)\b", 3),
+    (r"\b(basic|basico|a1|a2)\b", 2),
+]
+_RE_OBLIGA = re.compile(r"\b(required|requirement|mandatory|must|essential|imprescindible|"
+                        r"obligatori[oa]|requisito|se requiere|requerid[oa]|necesari[oa]|needed)\b")
+_RE_OPCIONAL = re.compile(r"\b(plus|nice to have|bonus|advantage|asset|preferred|ideally|desirable|"
+                          r"valorable|se valorara|valoraremos|deseable|a valorar|would be great)\b")
+_RE_CLAUSULA = re.compile(r"[.;\n•·|]|\s-\s")
+
+
+def idiomas_exigidos(texto_norm):
+    """[{idioma, nivel (1-6 o None), frase}] de los idiomas que la oferta exige.
+    Con varios idiomas en una frase («inglés B2 y francés fluido»), cada palabra
+    de nivel se asigna al idioma más pegado a ella (por los bordes)."""
+    out = {}
+    for frase in _RE_CLAUSULA.split(texto_norm or ""):
+        if not frase.strip() or _RE_OPCIONAL.search(frase):
+            continue
+        idis = list(_RE_IDIOMA.finditer(frase))
+        if not idis:
+            continue
+        niveles = [(m.start(), m.end(), n) for pat, n in _NIVELES for m in re.finditer(pat, frase)]
+        if not niveles and not _RE_OBLIGA.search(frase):
+            continue
+        hueco = lambda a, b: max(a.start() - b[1], b[0] - a.end(), 0)
+        asignado = {}
+        for nv in niveles:
+            dueno = min(idis, key=lambda m: hueco(m, nv))
+            asignado[dueno.start()] = max(asignado.get(dueno.start(), 0), nv[2])
+        for m in idis:
+            k, nivel = m.lastgroup, asignado.get(m.start())
+            if k not in out or (nivel or 0) > (out[k]["nivel"] or 0):
+                out[k] = {"idioma": k, "nivel": nivel, "frase": frase.strip()[:160]}
+    return list(out.values())
+
+
 # ---- Filtro de títulos ---------------------------------------------------
 # Lo que evita el 80 % del trabajo: nunca se pide una ficha sin pasar esto.
 RE_TITULO_OK = re.compile(

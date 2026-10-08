@@ -36,6 +36,12 @@ Cuatro comprobaciones, todas mecánicas sobre campos que ya vienen calculados
      la fuente ya acotó la búsqueda por fecha (ids `li-`, `ij-`, `mf-`); el
      resto (Indeed, Tecnoempleo, semanales) sin fecha verificable se aparta con
      motivo «sin fecha de publicación». Sin `ventana_desde` no se comprueba.
+  5. **Idiomas** (8-oct-2026): `idiomas_exigidos` (lo calcula
+     `comun.idiomas_exigidos()` en `detallar_una`) contra los idiomas del
+     perfil (`filtros.idiomas`, por defecto `IDIOMAS_DEF`). Un idioma exigido
+     que no habla -> filtrada con motivo «idioma». Uno que habla pero a un nivel
+     que la oferta pone por encima del suyo -> pasa, con `alerta_idioma` para
+     que decida él (un «fluent» varía mucho de una empresa a otra).
 
 **Lo que este script NO toca, a propósito:**
 
@@ -119,6 +125,23 @@ def _keyword_excluida(puesto, excluir_keywords):
 # dan por buenas (LinkedIn f_TPR, InfoJobs sinceDate, Manfred updatedAt).
 _FUENTES_ACOTADAS = ("li-", "ij-", "mf-")
 
+# Nivel 1-6 (A1…C2, nativo=6). Los de su CV; se cambian con `filtros.idiomas`.
+IDIOMAS_DEF = {"espanol": 6, "ingles": 5, "frances": 3}
+_NIVEL_TXT = {1: "A1", 2: "A2", 3: "B1", 4: "B2", 5: "C1", 6: "nativo"}
+
+
+def veredicto_idiomas(exigidos, mios):
+    """(motivo_filtrada | None, alerta | None)."""
+    avisos = []
+    for x in exigidos or []:
+        tengo = mios.get(x["idioma"])
+        if tengo is None:
+            return f"pide {x['idioma']}: «{x['frase']}»", None
+        if x.get("nivel") and x["nivel"] > tengo:
+            avisos.append(f"Pide {x['idioma']} {_NIVEL_TXT[x['nivel']]} y tú tienes "
+                          f"{_NIVEL_TXT[tengo]} («{x['frase']}»)")
+    return None, ("; ".join(avisos) or None)
+
 
 def filtrar(candidatas, filtros):
     """(supervivientes, filtradas). Cada filtrada dice el motivo y el detalle,
@@ -128,6 +151,7 @@ def filtrar(candidatas, filtros):
     salario_min = filtros.get("salario_min")
     exigir_pub = bool(filtros.get("exigir_salario_publicado"))
 
+    mios = filtros.get("idiomas") or IDIOMAS_DEF
     desde = filtros.get("ventana_desde")
     if desde:
         desde = datetime.datetime.fromisoformat(str(desde).replace("Z", "+00:00")).date()
@@ -168,6 +192,13 @@ def filtrar(candidatas, filtros):
             filtradas.append(dict(oferta=cand, motivo="salario por debajo del mínimo",
                                    detalle=f"{cand.get('salario')} (< {salario_min})"))
             continue
+
+        fuera, alerta = veredicto_idiomas(cand.get("idiomas_exigidos"), mios)
+        if fuera:
+            filtradas.append(dict(oferta=cand, motivo="idioma", detalle=fuera))
+            continue
+        if alerta:
+            cand = dict(cand, alerta_idioma=alerta)
 
         supervivientes.append(cand)
 

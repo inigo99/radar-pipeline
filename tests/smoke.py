@@ -190,6 +190,24 @@ def main():
                              "la aritmética de la página coincide con la del pipeline"):
                 print(r.stderr[-1500:])
 
+            # CV legible por un ATS, seguimiento y entrevista (8-oct-2026).
+            pdfs = os.path.join(tmp, "pdf")
+            r = subprocess.run([node, os.path.join(RAIZ, "tests", "pagina.mjs"), html_p, pdfs],
+                               capture_output=True, text=True, cwd=RAIZ)
+            print(r.stdout.rstrip())
+            if not comprueba(r.returncode == 0, "tests/pagina.mjs (ATS, seguimiento, entrevista)"):
+                print(r.stderr[-1500:])
+            # Lo que ve un ATS es la capa de texto: pdftotext la saca igual que
+            # ellos. Sin poppler, se avisa y se sigue.
+            if shutil.which("pdftotext") and os.path.isdir(pdfs):
+                for f in sorted(os.listdir(pdfs)):
+                    t = subprocess.run(["pdftotext", os.path.join(pdfs, f), "-"],
+                                       capture_output=True, text=True).stdout
+                    comprueba(len(t.split()) > 50 and not re.search(r"\d{4}\s*[–—]", t),
+                              f"pdftotext lee el CV {f} (texto entero, fechas ASCII)")
+            else:
+                print("  (sin pdftotext: me salto la lectura del CV como un ATS)")
+
     print("\n[6] pipeline/fuentes/ importa limpio y pasa sus tests")
     r = subprocess.run([sys.executable, os.path.join(RAIZ, "tests", "test_fuentes.py")],
                        capture_output=True, text=True, cwd=RAIZ)

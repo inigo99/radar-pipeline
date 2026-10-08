@@ -358,6 +358,33 @@ def test_linkedin_consultas_del_dia_incluye_zonas_locales():
     assert any("Navarre" in u for u in urls) and any("Gipuzkoa" in u for u in urls)
 
 
+# ------------------------------------------------------------ idiomas ----
+
+def test_idiomas_exigidos():
+    """8-oct-2026: sólo cuenta un idioma con señal de exigencia en la misma
+    cláusula; «a plus»/«valorable» no exige y «German customers» no es idioma."""
+    f = lambda t: {x["idioma"]: x["nivel"] for x in comun.idiomas_exigidos(comun.norm(t))}
+    assert f("Fluent German is required.") == {"aleman": 5}
+    assert f("We have German customers and offices in France.") == {}
+    assert f("Fluent English; German is a plus.") == {"ingles": 5}
+    assert f("Nivel alto de inglés imprescindible. Se valorará catalán.") == {"ingles": 5}
+    assert f("Inglés B2 y francés fluido") == {"ingles": 4, "frances": 5}
+    assert f("Native Spanish and fluent English") == {"espanol": 6, "ingles": 5}
+    assert f("Euskera obligatorio") == {"euskera": None}
+
+
+def test_veredicto_idiomas():
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pipeline"))
+    from filtrar import veredicto_idiomas, IDIOMAS_DEF
+    ex = lambda t: comun.idiomas_exigidos(comun.norm(t))
+    assert veredicto_idiomas(ex("Fluent German is required"), IDIOMAS_DEF)[0]
+    fuera, alerta = veredicto_idiomas(ex("Fluent French required"), IDIOMAS_DEF)
+    assert fuera is None and "frances C1" in alerta
+    assert veredicto_idiomas(ex("Fluent English"), IDIOMAS_DEF) == (None, None)
+    assert veredicto_idiomas(ex("Native English speaker"), IDIOMAS_DEF)[1]
+
+
+
 if __name__ == "__main__":
     import inspect
     mod = sys.modules[__name__]

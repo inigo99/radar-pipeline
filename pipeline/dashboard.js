@@ -2237,8 +2237,10 @@ function skillsConExtra(SK_ALL, skCfg, extra){
     const pal = n.split(/[^a-z0-9+#]+/).filter(x=>x && !STOP_SK.has(x));
     const filas = ' '+orden.map(c=>normTxt(out[c])).join(' ').replace(/[^a-z0-9+#]+/g,' ')+' ';
     if(pal.length && pal.every(x=>filas.includes(' '+x+' '))) continue;
-    let cat = null;
-    for(const v of Object.keys(SK_ALL)){
+    /* Términos que no salen en ninguna variante pero tienen sitio claro
+       (Angular salió de la fila fija el 8 oct 2026: sólo si la oferta lo pide). */
+    let cat = {angular:'dev', etl:'datos', rag:'ia'}[n] || null;
+    for(const v of (cat ? [] : Object.keys(SK_ALL))){
       const cats = SK_ALL[v] || {};
       const c = Object.keys(cats).find(k=>normTxt(cats[k]).includes(n));
       if(c){ cat = c; if(orden.includes(c)) break; }

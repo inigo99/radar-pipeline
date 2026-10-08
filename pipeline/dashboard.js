@@ -782,7 +782,7 @@ esta forma exacta:
 {
  "familia": "genai|ml|cv|ds|mlops|research|backend|general",
  "titular": "quién ES él, no el nombre del puesto del anuncio -- nunca copies ni adaptes ligeramente 'Puesto' de arriba (p.ej. si el puesto es 'Científico de datos', el titular NO puede ser 'Científico de Datos' ni nada que se le parezca). Es su identidad profesional para ESTA familia, en 2-4 palabras: 'Ingeniero de IA', 'Científico de Datos', 'Desarrollador Full Stack'... Si no se te ocurre algo mejor que encaje con la familia, usa 'Ingeniero Informático' (o 'Desarrollador Full Stack' si la familia es backend/general y encaja más). NUNCA 'Senior'/'Sénior'/'Sr.' aunque el puesto lo lleve",
- "resumen": "2-3 frases, máximo 240 caracteres, en el idioma de la oferta y en primera persona: quién es y el logro que conecta con esta oferta, SIN lista de tecnologías al final; 2,5 años en Orisha Commerce, nunca tres; la PoC de Orisha: más del 80 % de las interacciones con el resultado esperado, nunca 'precisión'/'accuracy' ni 'en producción'",
+ "resumen": "2-3 frases, máximo 240 caracteres, en el idioma de la oferta y en primera persona: quién es y el logro que conecta con esta oferta, SIN lista de tecnologías al final; 2,5 años en Orisha Commerce, nunca tres; la PoC de Orisha (pasó a producción): más del 80 % de las interacciones con el resultado esperado, nunca 'precisión'/'accuracy'",
  "skills_extra": "0 a 4 términos que SÍ tiene y la variante de su familia no saca, separados por coma, o cadena vacía",
  "reqs": [["clave_de_vocabulario", peso_1_a_10, "etiqueta con las palabras del anuncio"], "..."],
  "surfaced": ["claves de reqs que el resumen/titular sacan a relucir -- SOLO si tiene evidencia > 0 en el PERFIL"],

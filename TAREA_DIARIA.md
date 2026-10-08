@@ -318,7 +318,9 @@ titular y resumen; sin `carta` ni `skills_extra`).
   «Golang»). Experiencia: **2,5 años en Orisha Commerce**, nunca «tres
   años» (48 resúmenes lo decían). La PoC de Orisha se cuenta como «más del
   80 % de las interacciones dieron el resultado esperado», nunca «80 % de
-  precisión/accuracy» ni «en producción» (era una PoC). Las ofertas
+  precisión/accuracy». Sí pasó a producción (los modelos de descuentos y de
+  interacción con el cliente), pero el 80 % no se presenta como cifra de
+  producción. Las ofertas
   anteriores al 10-sep-2026 llevan resúmenes más largos: no se reescriben en
   bloque, sólo las nuevas salen cortas.
 - **Nunca «Senior»/«Sénior»/«Sr.» en el `titular`**, aunque el anuncio lo

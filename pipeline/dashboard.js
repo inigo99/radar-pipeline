@@ -2218,7 +2218,7 @@ const CV_LH = 1.36;   // más aire entre líneas: el CV corto ya no necesita apr
    «Herramientas». Se pone al principio de la fila, tras la etiqueta, porque
    es lo que pide la oferta. Mismo candado que siempre: `skillsExtra` sólo
    trae tecnologías que ya tiene. */
-const FALLBACK_CAT = {datos:['ia','tools'], ia:['datos','tools'], dev:['devops','tools'],
+const FALLBACK_CAT = {datos:['dev','tools','ia'], ia:['datos','tools'], dev:['devops','tools'],
                       devops:['dev','tools'], leng:['dev','tools'], tools:['dev','ia','datos']};
 const STOP_SK = new Set(['de','del','y','e','en','con','ia','ai','and','of','for','the']);
 function skillsConExtra(SK_ALL, skCfg, extra){

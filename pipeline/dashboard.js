@@ -2366,17 +2366,21 @@ function cvBloques(r, FS){
                  [['in',CV.contacto.linkedin],['gh',CV.contacto.github]]];
   if((L.extras||[]).length) filas.push(L.extras);
   filas = filas.map(f=>f.filter(x=>x && x[1])).filter(f=>f.length);
-  /* Sin foto (CV internacional) el contacto ocupa todo el ancho: dos filas de
-     tres en columnas repartidas hasta el margen derecho, con el remoto como
-     última columna (13 oct 2026, petición de Íñigo). Con foto, filas sueltas. */
+  /* El contacto ocupa todo el ancho: columnas repartidas hasta el margen
+     derecho (13 oct 2026, petición de Íñigo). Sin foto (CV internacional),
+     dos filas de tres con el remoto en la última columna. Si no cabe, filas
+     sueltas como antes. */
   let cols = null;
-  if(!foto){
-    const todos = [].concat(...filas);
-    const n = Math.ceil(todos.length/2);
-    filas = [todos.slice(0,n), todos.slice(n)].filter(f=>f.length);
+  {
+    /* Con foto (CV en español) se quedan las tres filas de siempre (datos,
+       perfiles, disponibilidad), alineadas en las mismas columnas. */
+    if(!foto){
+      const todos = [].concat(...filas), n = Math.ceil(todos.length/2);
+      filas = [todos.slice(0,n), todos.slice(n)].filter(f=>f.length);
+    }
     const anchoIt = it => 8.4*0.95+3+anchoTexto(it[1],8.4,'H',0);
     const w = []; filas.forEach(f=>f.forEach((it,j)=>{ w[j]=Math.max(w[j]||0, anchoIt(it)); }));
-    const total = CV_ANCHO-2*CV_PADX, suma = w.reduce((a,b)=>a+b,0);
+    const total = CV_ANCHO-2*CV_PADX-dx, suma = w.reduce((a,b)=>a+b,0);
     if(w.length>1 && suma<=total){
       const hueco = (total-suma)/(w.length-1);
       cols = []; w.reduce((x,wj,j)=>{ cols[j]=x; return x+wj+hueco; }, 0);

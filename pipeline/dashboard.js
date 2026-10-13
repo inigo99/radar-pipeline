@@ -2362,14 +2362,28 @@ function cvBloques(r, FS){
 
   bl.push({s:String(nombre||''), size:22, f:'HB', rgb:CV_ACENTO, mb:1*PX, cabecera:true, dx, foto});
   bl.push({s:titularCV(r, fam), size:11.5, f:'HB', rgb:CV_ACENTO, mb:4*PX, cabecera:true, dx});
-  const filas = [[['pin',ciudad],['tel',CV.contacto.tel],['mail',CV.contacto.email]],
+  let filas = [[['pin',ciudad],['tel',CV.contacto.tel],['mail',CV.contacto.email]],
                  [['in',CV.contacto.linkedin],['gh',CV.contacto.github]]];
   if((L.extras||[]).length) filas.push(L.extras);
-  for(const f of filas){
-    const fila = f.filter(x=>x && x[1]);
-    if(fila.length) bl.push({fila, s:fila.map(x=>x[1]).join(' · '), size:8.4, cabecera:true, dx});
+  filas = filas.map(f=>f.filter(x=>x && x[1])).filter(f=>f.length);
+  /* Sin foto (CV internacional) el contacto ocupa todo el ancho: dos filas de
+     tres en columnas repartidas hasta el margen derecho, con el remoto como
+     última columna (13 oct 2026, petición de Íñigo). Con foto, filas sueltas. */
+  let cols = null;
+  if(!foto){
+    const todos = [].concat(...filas);
+    const n = Math.ceil(todos.length/2);
+    filas = [todos.slice(0,n), todos.slice(n)].filter(f=>f.length);
+    const anchoIt = it => 8.4*0.95+3+anchoTexto(it[1],8.4,'H',0);
+    const w = []; filas.forEach(f=>f.forEach((it,j)=>{ w[j]=Math.max(w[j]||0, anchoIt(it)); }));
+    const total = CV_ANCHO-2*CV_PADX, suma = w.reduce((a,b)=>a+b,0);
+    if(w.length>1 && suma<=total){
+      const hueco = (total-suma)/(w.length-1);
+      cols = []; w.reduce((x,wj,j)=>{ cols[j]=x; return x+wj+hueco; }, 0);
+    }
   }
-  bl.push({s:'', finCab:true, mt:8*PX, mb:2*PX, regla:{pt:0, rgb:CV_ACENTO, ancho:1.5}});
+  for(const fila of filas) bl.push({fila, cols, s:fila.map(x=>x[1]).join(' · '), size:8.4, cabecera:true, dx});
+  bl.push({s:'', finCab:true, mt:12*PX, mb:2*PX, regla:{pt:0, rgb:CV_ACENTO, ancho:1.5}});
 
   h2(L.resumen);
   bl.push({s:r.resumen, size:FS, f:'H', rgb:CV_TEXTO, mb:2*PX, just:true});
@@ -2492,7 +2506,8 @@ function cvDisponer(bl, medir, sinFoto){
       if(!medir){
         const s = b.size*0.95;
         let x = x0;
-        for(const [ico,t] of b.fila){
+        for(const [j,[ico,t]] of b.fila.entries()){
+          if(b.cols) x = x0 + b.cols[j];
           const raw = iconoPdf(ico, x, y-1, s);
           if(raw){ items.push({raw}); x += s+3; }
           items.push({s:t, size:b.size, f:'H', x, y, rgb:CV_GRIS});

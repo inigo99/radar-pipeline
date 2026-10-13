@@ -2315,6 +2315,19 @@ function titularCV(r, fam){
 /* Partes de las etiquetas del perfil: «Rol — Empresa», «Lugar · Fechas». */
 const corta = (t, sep) => { t=String(t||''); const i=t.lastIndexOf(sep); return i<0 ? [t,''] : [t.slice(0,i), t.slice(i+sep.length)]; };
 const fechasDe = t => fechasAscii(corta(t,' · ')[1] || t);
+/* «Septiembre 2023 - Marzo 2026» -> «sep 2023 - mar 2026» («Sep 2023 - Mar
+   2026» en inglés), y si el año se repite, «feb - jun 2022». Con los meses
+   enteros los dos periodos de Veridas no cabían en una línea. */
+const MES3 = {enero:'ene',febrero:'feb',marzo:'mar',abril:'abr',mayo:'may',junio:'jun',julio:'jul',agosto:'ago',
+  septiembre:'sep',setiembre:'sep',octubre:'oct',noviembre:'nov',diciembre:'dic',january:'Jan',february:'Feb',
+  march:'Mar',april:'Apr',june:'Jun',july:'Jul',august:'Aug',september:'Sep',october:'Oct',november:'Nov',december:'Dec'};
+function fechaCorta(t, idi){
+  let s = String(t||'').replace(/[A-Za-zÁÉÍÓÚáéíóú]+/g, w => {
+    const m = MES3[w.toLowerCase()]; if(!m) return w;
+    return idi==='en' ? m.charAt(0).toUpperCase()+m.slice(1) : m.toLowerCase();
+  });
+  return s.replace(/^(\S+) (\d{4}) - (\S+) \2$/, '$1 - $3 $2');
+}
 
 function cvBloques(r, FS){
   const idi = r.idioma==='en' ? 'en' : 'es';
@@ -2359,14 +2372,16 @@ function cvBloques(r, FS){
   bl.push({s:'', finCab:true, mt:8*PX, mb:2*PX, regla:{pt:0, rgb:CV_ACENTO, ancho:1.5}});
 
   h2(L.resumen);
-  bl.push({s:r.resumen, size:FS, f:'H', rgb:CV_TEXTO, mb:2*PX});
+  bl.push({s:r.resumen, size:FS, f:'H', rgb:CV_TEXTO, mb:2*PX, just:true});
 
   h2(L.exp);
   const [oRol, oEmp] = corta(L.o_tit, ' — ');
-  cab(oRol, oEmp, [fechasDe(L.o_loc)]); desc(L.o_desc);
+  cab(oRol, oEmp, [fechaCorta(fechasDe(L.o_loc),idi)]); desc(L.o_desc);
   vinetas(oo.map(k=>B[k]));
   const [vRol, vEmp] = corta(L.v_tit, ' — ');
-  cab(vRol, vEmp, String(L.v_loc||'').split('\n').map(fechasDe)); desc(L.v_desc);
+  /* Los dos periodos de Veridas, separados pero en una sola línea (13 oct
+     2026: en dos líneas dejaban un hueco bajo la cabecera). */
+  cab(vRol, vEmp, [String(L.v_loc||'').split('\n').map(t=>fechaCorta(fechasDe(t),idi)).join(' · ')]); desc(L.v_desc);
   vinetas(vv.map(k=>B[k]));
 
   /* Proyectos de GitHub (7 oct 2026): dos por familia, en el orden de
@@ -2392,11 +2407,11 @@ function cvBloques(r, FS){
      dos veces lo mismo y se comía una línea de cada dos. */
   const nombraTesis = t => /\bTFM\b|\bTFG\b|Trabajo de Fin|Master'?s Thesis|Bachelor'?s Thesis/i.test(t||'');
   const [mUni, mFec] = corta(L.m_sub, ' · ');
-  cab(L.m_tit, mUni, [mFec]);
+  cab(L.m_tit, mUni, [fechaCorta(mFec,idi)]);
   if(!nombraTesis(tfmB) && L.m_tfm) bl.push({s:L.m_tfm, size:FS, f:'HI', rgb:CV_GRIS});
   vinetas([tfmB]);
   const [gUni, gFec] = corta(L.g_sub, ' · ');
-  cab(L.g_tit, gUni, [gFec]);
+  cab(L.g_tit, gUni, [fechaCorta(gFec,idi)]);
   if(!nombraTesis(tfgB) && L.g_tfg) bl.push({s:L.g_tfg, size:FS, f:'HI', rgb:CV_GRIS});
   vinetas([tfgB]);
   if((L.compl_items||[]).length)
@@ -2413,10 +2428,15 @@ function cvBloques(r, FS){
   return bl;
 }
 
-function cvLinea(l, b, x, y){
-  /* Alineado a la izquierda desde el 8 oct 2026: el justificado dejaba «ríos»
-     y, al extraer el texto (lo que lee un ATS), espacios dobles. */
-  return {s:l.s, size:b.size, f:b.f||'H', x, y, rgb:b.rgb||CV_TINTA, tc:b.tc||0};
+/* Justificado otra vez desde el 13 oct 2026 (lo pidió Íñigo con la maqueta
+   nueva; del 8 al 13 de octubre fue alineado a la izquierda). Se hace con `Tw`
+   (espacio entre palabras) en todas las líneas menos la última de cada
+   párrafo, así que la capa de texto sigue llevando un solo espacio real entre
+   palabras. `ancho` sólo se pasa en los bloques de texto corrido. */
+function cvLinea(l, b, x, y, ancho){
+  const huecos = (l.s.match(/ /g)||[]).length;
+  const tw = (ancho && !l.fin && huecos) ? Math.max(0, (ancho-anchoTexto(l.s,b.size,b.f||'H',b.tc||0))/huecos) : 0;
+  return {s:l.s, size:b.size, f:b.f||'H', x, y, rgb:b.rgb||CV_TINTA, tc:b.tc||0, tw};
 }
 
 /* Coloca los bloques. Con `medir`, sólo devuelve la altura. Si la cabecera
@@ -2444,7 +2464,7 @@ function cvDisponer(bl, medir, sinFoto){
           y -= b.size*CV_LH;
           if(medir) return;
           if(i===0) items.push({s:'•', size:b.size, f:'H', x:x0+2.5, y, rgb:CV_ACENTO});
-          items.push(cvLinea(l,b,x0+sangria,y));
+          items.push(cvLinea(l,b,x0+sangria,y,ancho-sangria));
         });
       });
     }else if(b.cab){
@@ -2485,7 +2505,7 @@ function cvDisponer(bl, medir, sinFoto){
         y -= b.size*CV_LH;
         if(medir) return;
         if(k===0 && lab) items.push({s:lab, size:b.size, f:'HB', x:x0, y, rgb:CV_ACENTO});
-        items.push({s:l.s, size:b.size, f:'H', x:x0+b.col, y, rgb:CV_TEXTO});
+        items.push(cvLinea(l, {size:b.size, f:'H', rgb:CV_TEXTO}, x0+b.col, y, ancho-b.col));
       });
     }else if(b.etiq && b.s.indexOf(': ')>0){
       /* «Etiqueta: términos», con la etiqueta en negrita. Se envuelve con el
@@ -2503,7 +2523,7 @@ function cvDisponer(bl, medir, sinFoto){
     }else{
       for(const l of envolver(b.s,b.size,b.f||'H',ancho,b.tc||0)){
         y -= b.size*CV_LH;
-        if(!medir) items.push(cvLinea(l,b,x0,y));
+        if(!medir) items.push(cvLinea(l,b,x0,y,b.just?ancho:0));
       }
       if(b.regla){
         y -= b.regla.pt;

@@ -47,8 +47,11 @@ ok(ev(`skillsConExtra({v:{dev:'Development: React', tools:'Tools: Jira'}}, {vari
    'Angular, cuando la oferta lo pide, va a «Desarrollo»');
 ok(ev(`skillsConExtra({v:{leng:'Languages: Python', tools:'Tools: Jira'}}, {variante:'v', orden:['leng','tools']}, 'PHP').leng.includes('PHP')`),
    'PHP va a «Lenguajes»');
-ok(ev(`DATA.slice(0,20).every(r=>cvDisponer(cvBloques(r,9.6),false).items.every(i=>!i.tw))`),
-   'CV alineado a la izquierda (sin espaciado de justificado)');
+ok(ev(`DATA.slice(0,20).every(r=>cvDisponer(cvBloques(r,9.6),false).items.some(i=>i.tw>0))`),
+   'CV justificado (espaciado entre palabras en las líneas no finales)');
+ok(ev(`fechaCorta('Febrero 2022 - Junio 2022','es')`) === 'feb - jun 2022' &&
+   ev(`fechaCorta('September 2023 - March 2026','en')`) === 'Sep 2023 - Mar 2026',
+   'fechas del CV con el mes abreviado');
 
 console.log('página: seguimiento');
 const [a, b, c] = ids;

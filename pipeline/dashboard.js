@@ -2064,8 +2064,9 @@ TR:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,250,333,408,
 TB:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,250,333,555,500,500,1000,833,278,333,333,500,570,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,570,570,570,500,930,722,667,722,722,667,611,778,778,389,500,778,667,944,722,778,611,778,722,556,667,722,722,1000,722,722,667,333,278,333,581,500,333,500,556,444,556,444,333,500,556,278,333,556,278,833,556,500,556,556,444,389,333,556,500,722,500,500,444,394,220,394,520,350,500,350,333,500,500,1000,500,500,333,1000,556,333,1000,350,667,350,350,333,333,500,500,350,500,1000,333,1000,389,333,722,350,444,722,250,333,500,500,500,500,220,500,333,747,300,500,570,333,747,333,400,570,300,300,333,556,540,250,333,300,330,500,750,750,750,500,722,722,722,722,722,722,1000,722,667,667,667,667,389,389,389,389,722,722,778,778,778,778,778,570,778,722,722,722,722,722,611,556,500,500,500,500,500,500,722,444,444,444,444,444,278,278,278,278,500,556,500,500,500,500,500,570,500,556,556,556,556,500,556,500],
 TI:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,250,333,420,500,500,833,778,214,333,333,500,675,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,675,675,675,500,920,611,611,667,722,611,611,722,722,333,444,667,556,833,667,722,611,722,611,500,556,722,611,833,611,556,556,389,278,389,422,500,333,500,500,444,500,444,278,500,500,278,278,444,278,722,500,500,500,500,389,389,278,500,444,667,444,444,389,400,275,400,541,350,500,350,333,500,556,889,500,500,333,1000,500,333,944,350,556,350,350,333,333,556,556,350,500,889,333,980,389,333,667,350,389,556,250,389,500,500,500,500,275,500,333,760,276,500,675,333,760,333,400,675,300,300,333,500,523,250,333,300,310,500,750,750,750,500,611,611,611,611,611,611,889,667,611,611,611,611,333,333,333,333,722,667,722,722,722,722,722,675,722,722,722,722,722,556,611,500,500,500,500,500,500,500,667,444,444,444,444,444,278,278,278,278,500,500,500,500,500,500,500,675,500,500,500,500,500,444,500,444]};
 const CP1252={'€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,'•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159};
-const FONTID={H:'F1',HB:'F2',TR:'F3',TB:'F4',TI:'F5'};
-const FONTBASE=[['F1','Helvetica'],['F2','Helvetica-Bold'],['F3','Times-Roman'],['F4','Times-Bold'],['F5','Times-Italic']];
+FW.HI = FW.H;   // Helvetica-Oblique tiene los mismos anchos que Helvetica
+const FONTID={H:'F1',HB:'F2',TR:'F3',TB:'F4',TI:'F5',HI:'F6'};
+const FONTBASE=[['F1','Helvetica'],['F2','Helvetica-Bold'],['F3','Times-Roman'],['F4','Times-Bold'],['F5','Times-Italic'],['F6','Helvetica-Oblique']];
 
 function pdfByte(ch){
   const c=ch.codePointAt(0);
@@ -2114,12 +2115,17 @@ function bytesTexto(arr,s){
 const n2 = v => (Math.round(v*100)/100).toString();
 
 /* Escribe el PDF. `paginas` es una lista de listas de elementos:
-   {s,size,f,x,y,rgb,tw,tc} para texto y {linea:{x1,x2,y,rgb,ancho}} para una regla. */
-function construirPdf(paginas,W,H){
-  const N=paginas.length, idFont=3+2*N;
+   {s,size,f,x,y,rgb,tw,tc} para texto, {linea:{x1,x2,y,rgb,ancho}} para una
+   regla y {raw:'…'} para operadores de dibujo ya escritos (iconos, la franja,
+   la foto). `imagenes` (opcional): [{nombre:'Im1', bytes, w, h}] en JPEG, que
+   el PDF guarda tal cual con DCTDecode. */
+function construirPdf(paginas,W,H,imagenes){
+  imagenes = imagenes || [];
+  const N=paginas.length, idFont=3+2*N, idImg=idFont+FONTBASE.length;
   const bytes=[], off=[];
   const obj=(id,cuerpo)=>{ off[id]=bytes.length; bytesAscii(bytes,id+' 0 obj\n'+cuerpo+'\nendobj\n'); };
-  const recursos='<</Font<<'+FONTBASE.map((f,i)=>'/'+f[0]+' '+(idFont+i)+' 0 R').join('')+'>>>>';
+  const recursos='<</Font<<'+FONTBASE.map((f,i)=>'/'+f[0]+' '+(idFont+i)+' 0 R').join('')+'>>'
+    +(imagenes.length ? '/XObject<<'+imagenes.map((im,j)=>'/'+im.nombre+' '+(idImg+j)+' 0 R').join('')+'>>' : '')+'>>';
 
   bytesAscii(bytes,'%PDF-1.4\n');
   obj(1,'<</Type/Catalog/Pages 2 0 R>>');
@@ -2131,6 +2137,7 @@ function construirPdf(paginas,W,H){
       +'/Resources'+recursos+'/Contents '+idCont+' 0 R>>');
     const cs=[];
     for(const it of items){
+      if(it.raw){ bytesAscii(cs,it.raw+'\n'); continue; }
       if(it.linea){
         const g=it.linea.rgb||[0.80,0.84,0.83];
         bytesAscii(cs,g.map(n2).join(' ')+' RG '+n2(it.linea.ancho||0.8)+' w '
@@ -2154,7 +2161,15 @@ function construirPdf(paginas,W,H){
   FONTBASE.forEach((f,i)=>obj(idFont+i,
     '<</Type/Font/Subtype/Type1/BaseFont/'+f[1]+'/Encoding/WinAnsiEncoding>>'));
 
-  const total=idFont+FONTBASE.length-1, inicioXref=bytes.length;
+  imagenes.forEach((im,j)=>{
+    off[idImg+j]=bytes.length;
+    bytesAscii(bytes,(idImg+j)+' 0 obj\n<</Type/XObject/Subtype/Image/Width '+im.w+'/Height '+im.h
+      +'/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length '+im.bytes.length+'>>\nstream\n');
+    for(const b of im.bytes) bytes.push(b);
+    bytesAscii(bytes,'\nendstream\nendobj\n');
+  });
+
+  const total=idImg+imagenes.length-1, inicioXref=bytes.length;
   bytesAscii(bytes,'xref\n0 '+(total+1)+'\n0000000000 65535 f \n');
   for(let i=1;i<=total;i++) bytesAscii(bytes,String(off[i]).padStart(10,'0')+' 00000 n \n');
   bytesAscii(bytes,'trailer\n<</Size '+(total+1)+'/Root 1 0 R>>\nstartxref\n'+inicioXref+'\n%%EOF\n');
@@ -2204,8 +2219,31 @@ function pdfDoc(r, kind, texto){
    que cabe. Todo lo que se imprime sale de CV (el perfil real) y de la fila. */
 const PX = 0.75;                      // 1 px CSS = 0.75 pt
 const CV_ANCHO = 595.28, CV_ALTO = 841.89;
-const CV_PADX = 34.02, CV_PADY = 25.51;   // 12 mm / 9 mm
-const CV_LH = 1.36;   // más aire entre líneas: el CV corto ya no necesita apretar
+const CV_PADX = 42.52, CV_PADY = 25.51, CV_PADB = 22.68;   // 15 mm / 9 mm / 8 mm
+const CV_LH = 1.4;
+/* Maqueta del 13 oct 2026 (la de los CV «España» e «Internacional» que Íñigo
+   eligió): Helvetica, azul marino de acento, franja arriba, fechas a la
+   derecha, iconos en el contacto y foto redonda sólo en el CV en español. */
+const CV_BANDA = 7*PX, CV_FOTO = 104*PX;
+const CV_TINTA=[0.11,0.14,0.19], CV_TEXTO=[0.16,0.2,0.25], CV_GRIS=[0.36,0.4,0.46],
+      CV_ACENTO=[0.086,0.227,0.388], CV_REGLA=[0.84,0.86,0.89];
+const CV_ICONOS={"pin": ["S", "12.00 22.00 m 12.00 22.00 19.00 15.70 19.00 10.00 c 19.00 8.77 18.68 7.56 18.06 6.50 c 17.45 5.44 16.56 4.55 15.50 3.94 c 14.44 3.32 13.23 3.00 12.00 3.00 c 10.77 3.00 9.56 3.32 8.50 3.94 c 7.44 4.55 6.55 5.44 5.94 6.50 c 5.32 7.56 5.00 8.77 5.00 10.00 c 5.00 15.70 12.00 22.00 12.00 22.00 c h 9.50 10.00 m 9.50 10.44 9.62 10.87 9.83 11.25 c 10.05 11.63 10.37 11.95 10.75 12.17 c 11.13 12.38 11.56 12.50 12.00 12.50 c 12.44 12.50 12.87 12.38 13.25 12.17 c 13.63 11.95 13.95 11.63 14.17 11.25 c 14.38 10.87 14.50 10.44 14.50 10.00 c 14.50 9.56 14.38 9.13 14.17 8.75 c 13.95 8.37 13.63 8.05 13.25 7.83 c 12.87 7.62 12.44 7.50 12.00 7.50 c 11.56 7.50 11.13 7.62 10.75 7.83 c 10.37 8.05 10.05 8.37 9.83 8.75 c 9.62 9.13 9.50 9.56 9.50 10.00 c h"], "tel": ["S", "22.00 16.90 m 22.00 19.90 l 22.00 20.18 21.94 20.46 21.83 20.71 c 21.72 20.97 21.55 21.20 21.35 21.39 c 21.14 21.58 20.89 21.72 20.63 21.81 c 20.36 21.90 20.08 21.93 19.80 21.90 c 16.73 21.55 13.79 20.49 11.20 18.80 c 8.78 17.26 6.74 15.22 5.20 12.80 c 3.51 10.21 2.45 7.27 2.10 4.20 c 2.07 3.92 2.10 3.64 2.19 3.37 c 2.28 3.11 2.42 2.86 2.61 2.65 c 2.80 2.45 3.03 2.28 3.29 2.17 c 3.54 2.06 3.82 2.00 4.10 2.00 c 7.10 2.00 l 7.42 2.00 7.74 2.07 8.02 2.21 c 8.31 2.36 8.55 2.57 8.74 2.83 c 8.93 3.08 9.05 3.38 9.10 3.70 c 9.20 4.70 9.50 5.60 9.80 6.50 c 9.88 6.74 9.92 6.99 9.91 7.25 c 9.90 7.50 9.84 7.75 9.74 7.98 c 9.63 8.21 9.48 8.42 9.30 8.60 c 8.00 9.90 l 8.71 11.15 9.58 12.29 10.60 13.30 c 11.61 14.32 12.75 15.19 14.00 15.90 c 15.30 14.60 l 15.48 14.43 15.70 14.29 15.93 14.20 c 16.17 14.11 16.41 14.06 16.67 14.06 c 16.92 14.06 17.17 14.11 17.40 14.20 c 18.30 14.50 19.20 14.80 20.20 14.90 c 20.52 14.95 20.82 15.07 21.07 15.26 c 21.33 15.45 21.54 15.69 21.69 15.98 c 21.83 16.26 21.90 16.58 21.90 16.90 c h"], "mail": ["S", "4.00 4.00 m 20.00 4.00 l 20.35 4.00 20.70 4.09 21.00 4.27 c 21.30 4.44 21.56 4.70 21.73 5.00 c 21.91 5.30 22.00 5.65 22.00 6.00 c 22.00 18.00 l 22.00 18.35 21.91 18.70 21.73 19.00 c 21.56 19.30 21.30 19.56 21.00 19.73 c 20.70 19.91 20.35 20.00 20.00 20.00 c 4.00 20.00 l 3.65 20.00 3.30 19.91 3.00 19.73 c 2.70 19.56 2.44 19.30 2.27 19.00 c 2.09 18.70 2.00 18.35 2.00 18.00 c 2.00 6.00 l 2.00 5.65 2.09 5.30 2.27 5.00 c 2.44 4.70 2.70 4.44 3.00 4.27 c 3.30 4.09 3.65 4.00 4.00 4.00 c h 22.00 6.00 m 12.00 13.00 l 2.00 6.00 l"], "in": ["f*", "20.40 20.50 m 16.80 20.50 l 16.80 14.90 l 16.80 13.60 16.80 11.90 15.00 11.90 c 13.20 11.90 12.90 13.30 12.90 14.80 c 12.90 20.50 l 9.30 20.50 l 9.30 9.00 l 12.70 9.00 l 12.70 10.60 l 13.20 9.70 14.30 8.80 16.10 8.80 c 19.70 8.80 20.40 11.20 20.40 14.30 c 20.40 20.50 l h 5.30 7.40 m 4.93 7.40 4.57 7.30 4.25 7.12 c 3.93 6.93 3.67 6.67 3.48 6.35 c 3.30 6.03 3.20 5.67 3.20 5.30 c 3.20 4.93 3.30 4.57 3.48 4.25 c 3.67 3.93 3.93 3.67 4.25 3.48 c 4.57 3.30 4.93 3.20 5.30 3.20 c 5.67 3.20 6.03 3.30 6.35 3.48 c 6.67 3.67 6.93 3.93 7.12 4.25 c 7.30 4.57 7.40 4.93 7.40 5.30 c 7.40 5.67 7.30 6.03 7.12 6.35 c 6.93 6.67 6.67 6.93 6.35 7.12 c 6.03 7.30 5.67 7.40 5.30 7.40 c h 7.10 20.50 m 3.60 20.50 l 3.60 9.00 l 7.10 9.00 l 7.10 20.50 l h 22.20 0.00 m 1.80 0.00 l 0.80 0.00 0.00 0.80 0.00 1.70 c 0.00 22.30 l 0.00 23.20 0.80 24.00 1.80 24.00 c 22.20 24.00 l 23.20 24.00 24.00 23.20 24.00 22.30 c 24.00 1.70 l 24.00 0.80 23.20 0.00 22.20 0.00 c h"], "gh": ["f", "12.00 0.30 m 10.11 0.29 8.24 0.73 6.54 1.58 c 4.85 2.44 3.39 3.68 2.27 5.21 c 1.15 6.73 0.41 8.51 0.10 10.38 c -0.20 12.25 -0.06 14.16 0.52 15.97 c 1.10 17.77 2.10 19.41 3.43 20.75 c 4.77 22.10 6.40 23.11 8.20 23.70 c 8.80 23.80 9.00 23.40 9.00 23.10 c 9.00 21.10 l 5.70 21.80 5.00 19.50 5.00 19.50 c 4.40 18.10 3.60 17.70 3.60 17.70 c 2.60 17.00 3.70 17.00 3.70 17.00 c 4.90 17.10 5.50 18.20 5.50 18.20 c 6.50 20.00 8.30 19.50 9.00 19.20 c 9.00 18.40 9.40 17.90 9.70 17.60 c 7.00 17.30 4.20 16.30 4.20 11.60 c 4.20 10.40 4.70 9.30 5.50 8.50 c 5.30 8.10 4.90 6.90 5.50 5.30 c 5.50 5.30 6.50 5.00 8.90 6.50 c 9.88 6.24 10.89 6.10 11.90 6.10 c 12.91 6.10 13.92 6.24 14.90 6.50 c 17.20 5.00 18.20 5.30 18.20 5.30 c 18.80 6.90 18.40 8.10 18.30 8.50 c 19.10 9.30 19.60 10.40 19.60 11.70 c 19.60 16.30 16.80 17.30 14.10 17.60 c 14.60 18.00 15.00 18.70 15.00 19.80 c 15.00 23.10 l 15.00 23.40 15.10 23.80 15.80 23.70 c 17.60 23.11 19.23 22.10 20.57 20.75 c 21.90 19.41 22.90 17.77 23.48 15.97 c 24.06 14.16 24.20 12.25 23.90 10.38 c 23.59 8.51 22.85 6.73 21.73 5.21 c 20.61 3.68 19.15 2.44 17.46 1.58 c 15.76 0.73 13.89 0.29 12.00 0.30 c"], "globe": ["S", "2.00 12.00 m 2.00 13.76 2.46 15.48 3.34 17.00 c 4.22 18.52 5.48 19.78 7.00 20.66 c 8.52 21.54 10.24 22.00 12.00 22.00 c 13.76 22.00 15.48 21.54 17.00 20.66 c 18.52 19.78 19.78 18.52 20.66 17.00 c 21.54 15.48 22.00 13.76 22.00 12.00 c 22.00 10.24 21.54 8.52 20.66 7.00 c 19.78 5.48 18.52 4.22 17.00 3.34 c 15.48 2.46 13.76 2.00 12.00 2.00 c 10.24 2.00 8.52 2.46 7.00 3.34 c 5.48 4.22 4.22 5.48 3.34 7.00 c 2.46 8.52 2.00 10.24 2.00 12.00 c h 2.00 12.00 m 22.00 12.00 l 12.00 2.00 m 13.63 3.82 14.79 6.01 15.38 8.39 c 15.97 10.76 15.97 13.24 15.38 15.61 c 14.79 17.99 13.63 20.18 12.00 22.00 c 12.00 2.00 m 10.37 3.82 9.21 6.01 8.62 8.39 c 8.03 10.76 8.03 13.24 8.62 15.61 c 9.21 17.99 10.37 20.18 12.00 22.00 c"], "check": ["S", "2.00 12.00 m 2.00 13.76 2.46 15.48 3.34 17.00 c 4.22 18.52 5.48 19.78 7.00 20.66 c 8.52 21.54 10.24 22.00 12.00 22.00 c 13.76 22.00 15.48 21.54 17.00 20.66 c 18.52 19.78 19.78 18.52 20.66 17.00 c 21.54 15.48 22.00 13.76 22.00 12.00 c 22.00 10.24 21.54 8.52 20.66 7.00 c 19.78 5.48 18.52 4.22 17.00 3.34 c 15.48 2.46 13.76 2.00 12.00 2.00 c 10.24 2.00 8.52 2.46 7.00 3.34 c 5.48 4.22 4.22 5.48 3.34 7.00 c 2.46 8.52 2.00 10.24 2.00 12.00 c h 8.00 12.00 m 11.00 15.00 l 16.00 9.00 l"], "car": ["S", "3.00 17.00 m 3.00 12.00 l 5.00 7.00 l 19.00 7.00 l 21.00 12.00 l 21.00 17.00 l h 3.00 12.00 m 21.00 12.00 l 5.00 17.00 m 5.00 17.35 5.09 17.70 5.27 18.00 c 5.44 18.30 5.70 18.56 6.00 18.73 c 6.30 18.91 6.65 19.00 7.00 19.00 c 7.35 19.00 7.70 18.91 8.00 18.73 c 8.30 18.56 8.56 18.30 8.73 18.00 c 8.91 17.70 9.00 17.35 9.00 17.00 c 9.00 16.65 8.91 16.30 8.73 16.00 c 8.56 15.70 8.30 15.44 8.00 15.27 c 7.70 15.09 7.35 15.00 7.00 15.00 c 6.65 15.00 6.30 15.09 6.00 15.27 c 5.70 15.44 5.44 15.70 5.27 16.00 c 5.09 16.30 5.00 16.65 5.00 17.00 c h 15.00 17.00 m 15.00 17.35 15.09 17.70 15.27 18.00 c 15.44 18.30 15.70 18.56 16.00 18.73 c 16.30 18.91 16.65 19.00 17.00 19.00 c 17.35 19.00 17.70 18.91 18.00 18.73 c 18.30 18.56 18.56 18.30 18.73 18.00 c 18.91 17.70 19.00 17.35 19.00 17.00 c 19.00 16.65 18.91 16.30 18.73 16.00 c 18.56 15.70 18.30 15.44 18.00 15.27 c 17.70 15.09 17.35 15.00 17.00 15.00 c 16.65 15.00 16.30 15.09 16.00 15.27 c 15.70 15.44 15.44 15.70 15.27 16.00 c 15.09 16.30 15.00 16.65 15.00 17.00 c h"]};
+/* Icono de 24×24 (coordenadas SVG) en una caja de `s` pt cuya esquina inferior
+   izquierda es (x, y). Trazo redondeado como en el diseño original. */
+function iconoPdf(k, x, y, s, rgb){
+  const ic = CV_ICONOS[k]; if(!ic) return '';
+  const c = (rgb||CV_ACENTO).map(n2).join(' '), e = s/24;
+  return 'q '+c+' RG '+c+' rg '+n2(e)+' 0 0 '+n2(-e)+' '+n2(x)+' '+n2(y+s)+' cm 2 w 1 J 1 j '
+    + ic[1] + ' ' + ic[0] + ' Q';
+}
+function circuloPdf(cx, cy, r){
+  const k = 0.5523*r;
+  return n2(cx+r)+' '+n2(cy)+' m '
+    +[[cx+r,cy+k,cx+k,cy+r,cx,cy+r],[cx-k,cy+r,cx-r,cy+k,cx-r,cy],
+      [cx-r,cy-k,cx-k,cy-r,cx,cy-r],[cx+k,cy-r,cx+r,cy-k,cx+r,cy]]
+     .map(a=>a.map(n2).join(' ')+' c').join(' ')+' h';
+}
+function bytesB64(b64){ const s=atob(b64), u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
 
 /* Tecnologías propias de ESTA oferta (`skillsExtra`) que la variante de la
    familia no saca por defecto (p.ej. React en una oferta de AI agent
@@ -2274,118 +2312,198 @@ function titularCV(r, fam){
   return (r.idioma==='en' && ROL_ES.test(r.titular||'')) ? tituloPorDefecto(fam, 'en') : r.titular;
 }
 
+/* Partes de las etiquetas del perfil: «Rol — Empresa», «Lugar · Fechas». */
+const corta = (t, sep) => { t=String(t||''); const i=t.lastIndexOf(sep); return i<0 ? [t,''] : [t.slice(0,i), t.slice(i+sep.length)]; };
+const fechasDe = t => fechasAscii(corta(t,' · ')[1] || t);
+
 function cvBloques(r, FS){
   const idi = r.idioma==='en' ? 'en' : 'es';
-  const L  = CV.labels[idi];
+  const L  = CV.labels[idi] || {};
   const B  = idi==='en' ? CV.bullets_en : CV.bullets_es;
   const SK_ALL = idi==='en' ? CV.skills_en  : CV.skills_es;
   const fam = CV.orden[r.familia] ? r.familia : 'backend';
   const oo = CV.orden[fam][0], vv = CV.orden[fam][1];
   const skCfg = CV.orden_skills[fam];
-  const SK = SK_ALL[skCfg.variante];
   const tfmB = B[CV.tfm_variant[fam] || 'M1a'];
   const tfgB = B[CV.tfg_variant[fam] || 'G1a'];
   const nombre = idi==='en' ? CV.contacto.nombre_en : CV.contacto.nombre_es;
   const ciudad = idi==='en' ? CV.contacto.ciudad_en : CV.contacto.ciudad_es;
+  /* Mercado (13 oct 2026, decisión de Íñigo): manda el idioma de la oferta.
+     Español = mercado español (foto, disponibilidad, carné); inglés =
+     internacional (sin foto, línea de remoto, a qué se dedica cada empresa).
+     Todo sale de `cv_labels.<idioma>`: `con_foto`, `extras`, `o_desc`, `v_desc`. */
+  const foto = !!(L.con_foto && CV.contacto.foto && CV.contacto.foto.b64);
+  const dx = foto ? CV_FOTO + 15 : 0;
   const bl=[];
-  const h2 = t => bl.push({s:t, size:9.4, f:'TB', mt:9*PX, mb:3.5*PX, tc:0.08*9.4,
-                           regla:{pt:1.5*PX, rgb:[0.60,0.60,0.60], ancho:0.6}});
-  const jt = (t,size) => bl.push({s:t, size:size||9.7, f:'TB', mt:4*PX});
-  /* Fechas con guion ASCII: el «–» entre fechas se lo come algún ATS (Workday
-     descartó la fecha entera; visto en github.com/MadsLorentzen/ai-job-search). */
-  const jl = t => bl.push({s:fechasAscii(t), size:8.8, f:'TI', mb:3*PX, rgb:[0.33,0.33,0.33]});
+  const h2 = t => bl.push({s:String(t||'').toUpperCase(), size:8.6, f:'HB', rgb:CV_ACENTO, tc:1.4*PX,
+                           mt:10*PX, mb:6*PX, regla:{pt:2.5*PX, rgb:CV_REGLA, ancho:0.75}});
+  /* Cabecera de un puesto, título o proyecto: lo principal en negrita, lo
+     secundario en azul y las fechas a la derecha, una por línea. Fechas con
+     guion ASCII: el «–» entre fechas se lo come algún ATS (Workday descartó
+     la fecha entera; visto en github.com/MadsLorentzen/ai-job-search). */
+  const cab = (s, suf, der) => bl.push({cab:true, s:String(s||''), suf:suf||'', der:(der||[]).filter(Boolean).map(fechasAscii), size:9.8, mt:5*PX});
+  /* A qué se dedica la empresa (CV internacional): va en la cabecera del
+     puesto, bajo el rol, y comparte línea con la segunda fecha si la hay. */
+  const desc = t => { if(t) bl[bl.length-1].desc = t; };
+  const vinetas = items => bl.push({items:items.filter(Boolean), size:FS, f:'H', rgb:CV_TEXTO, mb:4*PX});
 
-  bl.push({s:nombre, size:15.5, f:'TB', mb:1*PX});
-  bl.push({s:titularCV(r, fam), size:10.4, f:'TR', mb:3*PX});
-  const contacto = [ciudad,CV.contacto.tel,CV.contacto.email,CV.contacto.linkedin];
-  if(CV.contacto.github) contacto.push(CV.contacto.github);   // vacío hasta que haya repos que enseñar
-  bl.push({s:contacto.join(' · '),
-           size:9.2, f:'TR', mb:6*PX, regla:{pt:5*PX, rgb:[0.73,0.73,0.73], ancho:0.75}});
+  bl.push({s:String(nombre||''), size:22, f:'HB', rgb:CV_ACENTO, mb:1*PX, cabecera:true, dx, foto});
+  bl.push({s:titularCV(r, fam), size:11.5, f:'HB', rgb:CV_ACENTO, mb:4*PX, cabecera:true, dx});
+  const filas = [[['pin',ciudad],['tel',CV.contacto.tel],['mail',CV.contacto.email]],
+                 [['in',CV.contacto.linkedin],['gh',CV.contacto.github]]];
+  if((L.extras||[]).length) filas.push(L.extras);
+  for(const f of filas){
+    const fila = f.filter(x=>x && x[1]);
+    if(fila.length) bl.push({fila, s:fila.map(x=>x[1]).join(' · '), size:8.4, cabecera:true, dx});
+  }
+  bl.push({s:'', finCab:true, mt:8*PX, mb:2*PX, regla:{pt:0, rgb:CV_ACENTO, ancho:1.5}});
 
   h2(L.resumen);
-  bl.push({s:r.resumen, size:FS, f:'TR', mb:3.5*PX, just:true});
+  bl.push({s:r.resumen, size:FS, f:'H', rgb:CV_TEXTO, mb:2*PX});
 
   h2(L.exp);
-  jt(L.o_tit); jl(L.o_loc);
-  bl.push({items:oo.map(k=>B[k]), size:FS, f:'TR', mb:3*PX, just:true});
-  jt(L.v_tit); jl(L.v_loc);
-  bl.push({items:vv.map(k=>B[k]), size:FS, f:'TR', mb:3*PX, just:true});
+  const [oRol, oEmp] = corta(L.o_tit, ' — ');
+  cab(oRol, oEmp, [fechasDe(L.o_loc)]); desc(L.o_desc);
+  vinetas(oo.map(k=>B[k]));
+  const [vRol, vEmp] = corta(L.v_tit, ' — ');
+  cab(vRol, vEmp, String(L.v_loc||'').split('\n').map(fechasDe)); desc(L.v_desc);
+  vinetas(vv.map(k=>B[k]));
 
-  /* Proyectos de GitHub (7 oct 2026). Los textos viven en
-     `cv_labels.<idioma>.proy_items` (id -> texto) y cada familia saca dos, en
-     el orden de `proyectos_orden[familia]`: con los cuatro la letra bajaba de
-     10,5 a ~8,7 pt. Sin items, la sección no sale. */
+  /* Proyectos de GitHub (7 oct 2026): dos por familia, en el orden de
+     `proyectos_orden[familia]`. El texto es «nombre (año…): logro»; el nombre
+     y el enlace al repo van en la cabecera y el año a la derecha. */
   const PI = L.proy_items || {};
   const proy = ((CV.proyectos_orden||{})[fam] || Object.keys(PI).slice(0,2)).map(k=>PI[k]).filter(Boolean);
   if(proy.length){
     h2(L.proy);
-    bl.push({items:proy, size:FS, f:'TR', mb:3*PX, just:true});
+    for(const t of proy){
+      const m = /^(\S+)\s*\(([^)]*)\):\s*([\s\S]*)$/.exec(t);
+      if(!m){ vinetas([t]); continue; }
+      const anio = (m[2].match(/\d{4}/)||[''])[0];
+      const nota = m[2].replace(anio,'').replace(/^[\s,]+|[\s,]+$/g,'');
+      const txt = nota ? nota.charAt(0).toUpperCase()+nota.slice(1)+': '+m[3] : m[3].charAt(0).toUpperCase()+m[3].slice(1);
+      cab(m[1], CV.contacto.github ? CV.contacto.github+'/'+m[1] : '', [anio]);
+      vinetas([txt]);
+    }
   }
 
   h2(L.form);
-  jt(L.m_tit); jl(L.m_sub);
   /* Si el bullet de logro ya nombra la tesis, la línea del título sobra: decía
-     dos veces lo mismo y se comía una línea de cada dos. Se mira sobre el texto
-     del propio bullet para que siga valiendo si algún día se reescribe. */
+     dos veces lo mismo y se comía una línea de cada dos. */
   const nombraTesis = t => /\bTFM\b|\bTFG\b|Trabajo de Fin|Master'?s Thesis|Bachelor'?s Thesis/i.test(t||'');
-  if(!nombraTesis(tfmB)) bl.push({s:L.m_tfm, size:FS, f:'TR', mb:1.5*PX});
-  bl.push({items:[tfmB], size:FS, f:'TR', mb:3.5*PX});
-  jt(L.g_tit); jl(L.g_sub);
-  if(!nombraTesis(tfgB)) bl.push({s:L.g_tfg, size:FS, f:'TR', mb:1.5*PX});
-  bl.push({items:[tfgB], size:FS, f:'TR', mb:3.5*PX});
-  jt(L.compl, 9.4);
-  bl.push({items:L.compl_items, size:FS, f:'TR', mt:0, mb:3*PX});
+  const [mUni, mFec] = corta(L.m_sub, ' · ');
+  cab(L.m_tit, mUni, [mFec]);
+  if(!nombraTesis(tfmB) && L.m_tfm) bl.push({s:L.m_tfm, size:FS, f:'HI', rgb:CV_GRIS});
+  vinetas([tfmB]);
+  const [gUni, gFec] = corta(L.g_sub, ' · ');
+  cab(L.g_tit, gUni, [gFec]);
+  if(!nombraTesis(tfgB) && L.g_tfg) bl.push({s:L.g_tfg, size:FS, f:'HI', rgb:CV_GRIS});
+  vinetas([tfgB]);
+  if((L.compl_items||[]).length)
+    bl.push({s:L.compl+': '+L.compl_items.join(' · '), size:Math.min(FS,8.6), f:'H', rgb:CV_GRIS, etiq:true, mt:2*PX});
 
   h2(L.skills);
   const SKX = skillsConExtra(SK_ALL, skCfg, r.skillsExtra);
-  for(const s of skCfg.orden) bl.push({s:SKX[s], size:FS, f:'TR', mb:2*PX, etiq:true});
-  // «Liderazgo y comunicación» fuera del CV desde el 7 oct 2026 (decisión de
-  // Íñigo, para dejar sitio a Proyectos). `lid_txt` sigue en el perfil.
-  h2(L.idi);
-  bl.push({s:L.idi_txt, size:FS, f:'TR', mb:3.5*PX, just:true});
+  const filasSk = skCfg.orden.map(s=>SKX[s]).filter(Boolean);
+  if(L.idi_txt) filasSk.push((L.idi_lab || (idi==='en'?'Languages':'Idiomas'))+': '+L.idi_txt);
+  /* «Liderazgo y comunicación» fuera del CV desde el 7 oct 2026; los idiomas
+     van como última fila de competencias desde el 13 oct 2026. */
+  const col = Math.min(130, 8 + Math.max(0, ...filasSk.map(t=>anchoTexto(corta(t,': ')[0],FS,'HB',0))));
+  for(const s of filasSk) bl.push({s, size:FS, sk:true, col, mb:1.5*PX});
   return bl;
 }
 
-function cvLinea(l, b, x, y, maxW){
+function cvLinea(l, b, x, y){
   /* Alineado a la izquierda desde el 8 oct 2026: el justificado dejaba «ríos»
-     y, al extraer el texto (lo que lee un ATS), espacios dobles. `just` en los
-     bloques ya no hace nada. */
-  return {s:l.s, size:b.size, f:b.f, x, y, rgb:b.rgb, tc:b.tc||0};
+     y, al extraer el texto (lo que lee un ATS), espacios dobles. */
+  return {s:l.s, size:b.size, f:b.f||'H', x, y, rgb:b.rgb||CV_TINTA, tc:b.tc||0};
 }
 
-function cvDisponer(bl, medir){
+/* Coloca los bloques. Con `medir`, sólo devuelve la altura. Si la cabecera
+   lleva foto, el texto se centra en vertical con ella y la devuelve en `foto`. */
+function cvDisponer(bl, medir, sinFoto){
   const maxW = CV_ANCHO-2*CV_PADX, sangria = 13*PX;
-  let y = CV_ALTO-CV_PADY, prevMB = 0;
+  const y0 = CV_ALTO-CV_BANDA-CV_PADY;
+  let y = y0, prevMB = 0, foto = null, altoCab = 0;
   const items=[];
+  const iFin = bl.findIndex(b=>b.finCab);
+  if(!sinFoto && bl[0] && bl[0].foto && iFin>0){
+    const hTxt = cvDisponer(bl.slice(0,iFin), true, true).alto;
+    altoCab = Math.max(CV_FOTO, hTxt);
+    y -= (altoCab-hTxt)/2;
+    foto = {cx:CV_PADX+CV_FOTO/2, cy:y0-altoCab/2, r:CV_FOTO/2};
+  }
   for(const b of bl){
     y -= Math.max(prevMB, b.mt||0);          // los márgenes contiguos se solapan, como en CSS
+    const x0 = CV_PADX + (b.dx||0), ancho = maxW - (b.dx||0);
+    if(b.finCab && foto) y = Math.min(y, y0-altoCab-(b.mt||0));
     if(b.items){
-      for(const t of b.items){
-        const ls=envolver(t,b.size,b.f,maxW-sangria,0);
-        ls.forEach((l,i)=>{
+      b.items.forEach((t,j)=>{
+        if(j) y -= 2*PX;
+        envolver(t,b.size,b.f,ancho-sangria,0).forEach((l,i)=>{
           y -= b.size*CV_LH;
           if(medir) return;
-          if(i===0) items.push({s:'•', size:b.size, f:b.f, x:CV_PADX+2.5, y});
-          items.push(cvLinea(l,b,CV_PADX+sangria,y,maxW-sangria));
+          if(i===0) items.push({s:'•', size:b.size, f:'H', x:x0+2.5, y, rgb:CV_ACENTO});
+          items.push(cvLinea(l,b,x0+sangria,y));
         });
+      });
+    }else if(b.cab){
+      const dsz = 8.4, der = b.der||[];
+      const dw = Math.max(0, ...der.map(d=>anchoTexto(d,dsz,'H',0)));
+      const disp = ancho - (dw ? dw+10 : 0);
+      const sep = b.suf ? ' · ' : '';
+      const lineas = [];
+      if(anchoTexto(b.s,b.size,'HB',0) + (b.suf ? anchoTexto(sep+b.suf,b.size,'H',0) : 0) <= disp)
+        lineas.push([[b.s,'HB',CV_TINTA]].concat(b.suf ? [[sep+b.suf,'H',CV_ACENTO]] : []));
+      else{
+        envolver(b.s,b.size,'HB',disp,0).forEach(l=>lineas.push([[l.s,'HB',CV_TINTA]]));
+        if(b.suf) envolver(b.suf,b.size,'H',disp,0).forEach(l=>lineas.push([[l.s,'H',CV_ACENTO]]));
       }
+      if(b.desc) envolver(b.desc,dsz,'HI',disp,0).forEach(l=>lineas.push([[l.s,'HI',CV_GRIS,dsz]]));
+      for(let k=0; k<Math.max(lineas.length, der.length); k++){
+        y -= b.size*CV_LH;
+        if(medir) continue;
+        let x = x0;
+        for(const [t,f,rgb,sz] of (lineas[k]||[])){ items.push({s:t, size:sz||b.size, f, x, y, rgb}); x += anchoTexto(t,sz||b.size,f,0); }
+        if(der[k]) items.push({s:der[k], size:dsz, f:'H', x:x0+ancho-anchoTexto(der[k],dsz,'H',0), y, rgb:CV_GRIS});
+      }
+    }else if(b.fila){
+      y -= b.size*1.75;
+      if(!medir){
+        const s = b.size*0.95;
+        let x = x0;
+        for(const [ico,t] of b.fila){
+          const raw = iconoPdf(ico, x, y-1, s);
+          if(raw){ items.push({raw}); x += s+3; }
+          items.push({s:t, size:b.size, f:'H', x, y, rgb:CV_GRIS});
+          x += anchoTexto(t,b.size,'H',0)+10;
+        }
+      }
+    }else if(b.sk){
+      const [lab, val] = b.s.indexOf(': ')>0 ? corta(b.s,': ') : ['', b.s];
+      envolver(val,b.size,'H',ancho-b.col,0).forEach((l,k)=>{
+        y -= b.size*CV_LH;
+        if(medir) return;
+        if(k===0 && lab) items.push({s:lab, size:b.size, f:'HB', x:x0, y, rgb:CV_ACENTO});
+        items.push({s:l.s, size:b.size, f:'H', x:x0+b.col, y, rgb:CV_TEXTO});
+      });
     }else if(b.etiq && b.s.indexOf(': ')>0){
       /* «Etiqueta: términos», con la etiqueta en negrita. Se envuelve con el
          ancho que roba la negrita para que la primera línea no se salga. */
-      const i = b.s.indexOf(': ')+1, lab = b.s.slice(0,i), fb = 'TB';
-      const extra = anchoTexto(lab,b.size,fb,0)-anchoTexto(lab,b.size,b.f,0);
-      envolver(b.s,b.size,b.f,maxW-extra,0).forEach((l,k)=>{
+      const i = b.s.indexOf(': ')+1, lab = b.s.slice(0,i), f = b.f||'H';
+      const extra = anchoTexto(lab,b.size,'HB',0)-anchoTexto(lab,b.size,f,0);
+      envolver(b.s,b.size,f,ancho-extra,0).forEach((l,k)=>{
         y -= b.size*CV_LH;
         if(medir) return;
         if(k===0){
-          items.push({s:lab, size:b.size, f:fb, x:CV_PADX, y});
-          items.push({s:l.s.slice(i), size:b.size, f:b.f, x:CV_PADX+anchoTexto(lab,b.size,fb,0), y});
-        }else items.push(cvLinea(l,b,CV_PADX,y,maxW));
+          items.push({s:lab, size:b.size, f:'HB', x:x0, y, rgb:CV_TINTA});
+          items.push({s:l.s.slice(i), size:b.size, f, x:x0+anchoTexto(lab,b.size,'HB',0), y, rgb:b.rgb});
+        }else items.push(cvLinea(l,b,x0,y));
       });
     }else{
-      for(const l of envolver(b.s,b.size,b.f,maxW,b.tc||0)){
+      for(const l of envolver(b.s,b.size,b.f||'H',ancho,b.tc||0)){
         y -= b.size*CV_LH;
-        if(!medir) items.push(cvLinea(l,b,CV_PADX,y,maxW));
+        if(!medir) items.push(cvLinea(l,b,x0,y));
       }
       if(b.regla){
         y -= b.regla.pt;
@@ -2394,16 +2512,26 @@ function cvDisponer(bl, medir){
     }
     prevMB = b.mb||0;
   }
-  return {alto:(CV_ALTO-CV_PADY)-y, items};
+  return {alto:y0-y, items, foto};
 }
 
 function pdfCV(r){
-  const util = CV_ALTO-2*CV_PADY;
-  let FS = 8.1;
-  for(const fs of [10.5,10.2,9.9,9.6,9.3,9.0,8.7,8.4,8.1]){
+  const util = CV_ALTO-CV_BANDA-CV_PADY-CV_PADB;
+  let FS = 8.2;
+  for(const fs of [10.2,9.9,9.6,9.3,9.15,9.0,8.8,8.6,8.4,8.2]){
     if(cvDisponer(cvBloques(r,fs),true).alto <= util){ FS=fs; break; }
   }
-  return construirPdf([cvDisponer(cvBloques(r,FS),false).items], CV_ANCHO, CV_ALTO);
+  const lay = cvDisponer(cvBloques(r,FS),false);
+  const c = CV_ACENTO.map(n2).join(' ');
+  const items = [{raw:c+' rg 0 '+n2(CV_ALTO-CV_BANDA)+' '+n2(CV_ANCHO)+' '+n2(CV_BANDA)+' re f'}];
+  const imgs = [];
+  if(lay.foto){
+    const F = CV.contacto.foto, {cx, cy, r:rr} = lay.foto;
+    imgs.push({nombre:'Im1', bytes:bytesB64(F.b64), w:F.w, h:F.h});
+    items.push({raw:'q '+c+' rg '+circuloPdf(cx,cy,rr+3.75)+' f 1 1 1 rg '+circuloPdf(cx,cy,rr+2.25)+' f '
+      +circuloPdf(cx,cy,rr)+' W n '+n2(2*rr)+' 0 0 '+n2(2*rr)+' '+n2(cx-rr)+' '+n2(cy-rr)+' cm /Im1 Do Q'});
+  }
+  return construirPdf([items.concat(lay.items)], CV_ANCHO, CV_ALTO, imgs);
 }
 
 function nombreCV(r){ return 'CV_'+slug(r.empresa)+'__'+slug(r.puesto)+'.pdf'; }

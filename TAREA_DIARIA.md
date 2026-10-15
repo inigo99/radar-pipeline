@@ -159,8 +159,13 @@ portales, avisos de GitHub.
 
 ## Paso 1 — Datos de partida
 
-1. `ArtifactData get collection:"pipeline" doc_id:"snapshot"` con `out_dir`.
-2. `python pipeline/preparar_datos.py <volcado_snapshot> data`.
+1. `ArtifactData get collection:"pipeline" doc_id:"snapshot"` con `out_dir`
+   (si trae `partes: N` > 1, `get` también `snapshot_1`…`snapshot_{N-1}` al
+   mismo `out_dir`), y
+   `ArtifactData list collection:"manual"` con el **mismo** `out_dir` (ofertas
+   añadidas a mano con «+ Oferta» desde el último snapshot; suele estar vacía).
+2. `python pipeline/preparar_datos.py <out_dir> data` (el directorio, no el
+   fichero: así recoge también `manual/`).
 3. Si el snapshot falta o su `n_ofertas` no cuadra con la colección, volcado
    por colecciones (`ofertas`, `tailor`, `perfil/base`, `pipeline/cerradas`, y
    si están `estado`, `correo` y `filtradas`) y `preparar_datos.py` sobre él.
@@ -413,7 +418,9 @@ Publicar `out/dashboard.html` **siempre en la misma URL del artifact**, con
 `action:"read"` antes, **sin `capabilities`** (nunca `{}`: borrarlas se lleva
 por delante el seguimiento y la generación de textos).
 
-Subir `out/snapshot.json` a `pipeline/snapshot`, y sólo entonces escribir
+Subir `out/snapshot.json` a `pipeline/snapshot` y, si `exportar_snapshot.py`
+dice que hay más trozos, cada `out/snapshot_N.json` a `pipeline/snapshot_N`.
+Sólo entonces escribir
 `config/estado_tarea`.
 
 **Instrumentación de coste (añadida el 19-sep-2026).** `poda_antiguedad.py`,

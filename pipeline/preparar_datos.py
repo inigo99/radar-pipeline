@@ -32,10 +32,14 @@ def _leer(p):
         return json.load(fh)
 
 
-def _descomprime(d):
-    """El snapshot viaja comprimido para caber en un documento de 256 KB."""
+def _descomprime(d, ruta):
+    """El snapshot viaja comprimido y, si no cabe en 256 KB, en trozos
+    `snapshot_1.json`, `snapshot_2.json`… junto a `ruta`."""
     if isinstance(d, dict) and d.get("formato") == "gzip+base64" and "datos" in d:
-        return json.loads(gzip.decompress(base64.b64decode(d["datos"])).decode("utf-8"))
+        raiz, ext = os.path.splitext(ruta)
+        b64 = d["datos"] + "".join(_leer(f"{raiz}_{i}{ext}")["datos"]
+                                   for i in range(1, d.get("partes", 1)))
+        return json.loads(gzip.decompress(base64.b64decode(b64)).decode("utf-8"))
     return d
 
 
@@ -51,7 +55,7 @@ def _busca_snapshot(ruta):
             except (ValueError, OSError):
                 continue
             try:
-                d = _descomprime(d)
+                d = _descomprime(d, c)
             except Exception as exc:
                 raise SystemExit(f"El snapshot {c} no se puede descomprimir: {exc}")
             if isinstance(d, dict) and CLAVES_SNAPSHOT <= set(d):
@@ -115,6 +119,7 @@ def main():
     if isinstance(ofertas, dict):          # el snapshot puede venir indexado por id
         ofertas = list(ofertas.values())
     tailor = datos["tailor"]
+    _suma_manuales(volcado, ofertas, tailor)
 
     faltan = sorted({o["id"] for o in ofertas} - set(tailor))
     if faltan:
@@ -138,6 +143,31 @@ def main():
           f"{len(datos.get('filtradas') or {})} filtradas -> {destino}/")
 
     _avisa_duplicados(ofertas)
+
+
+def _suma_manuales(volcado, ofertas, tailor):
+    """Añade las ofertas de `<volcado>/manual/*.json` que aún no estén.
+
+    El botón «+ Oferta» del dashboard escribe `manual/<id>` = {row, oferta,
+    tailor}. El snapshot es de la última ejecución, así que una oferta añadida
+    después no está en él y se perdía al republicar. La página borra
+    `manual/<id>` en cuanto la ve horneada, así que esto sólo trae pendientes.
+    """
+    d = os.path.join(volcado if os.path.isdir(volcado) else os.path.dirname(volcado), "manual")
+    if not os.path.isdir(d):
+        return
+    ids = {o["id"] for o in ofertas}
+    n = 0
+    for f in sorted(os.listdir(d)):
+        if not f.endswith(".json"):
+            continue
+        m = _leer(os.path.join(d, f))
+        o, t = m.get("oferta"), m.get("tailor")
+        if not o or not t or o["id"] in ids:
+            continue
+        ofertas.append(o); tailor[o["id"]] = t; ids.add(o["id"]); n += 1
+    if n:
+        print(f"[manual] {n} ofertas añadidas a mano desde el último snapshot")
 
 
 def _avisa_duplicados(ofertas):

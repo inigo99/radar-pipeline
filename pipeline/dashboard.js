@@ -1,5 +1,7 @@
 
 const DATA = __DATA__;
+/* Ids horneados en esta publicación: sólo éstos dan por recogida una oferta manual. */
+const HORNEADAS = new Set(DATA.map(r=>r.id));
 const PERFIL = __PERFIL__;
 const CONTACTO = __CONTACTO__;
 const CV = __CV__;
@@ -144,14 +146,18 @@ async function initEstado(){
   /* Ofertas añadidas a mano con el botón "+" (16 sep 2026). `DATA` es una
      constante horneada en la última publicación: esto es el puente hasta que
      la tarea de mañana la recoja de verdad en `ofertas`/`tailor` y la
-     publicación de mañana la hornee dentro de `DATA`. A partir de ahí este
-     documento sobra pero no molesta -- `fila()` no vuelve a tocar un id que
-     ya está en `DATA`. */
+     publicación de mañana la hornee dentro de `DATA` (preparar_datos.py lee
+     `manual/` aunque el snapshot sea anterior). Cuando ya viene horneada,
+     este documento sobra y se borra. */
   db.collection('manual').onSnapshot(snap=>{
     snap.docs.forEach(d=>{
       const v=d.data(); if(!v) return;
-      MANUAL[d.id]=v;
-      if(!DATA.some(r=>r.id===d.id)){ DATA.push(v); return; }
+      const row = v.row || v;   // formato viejo: la fila suelta
+      MANUAL[d.id]=row;
+      /* Se compara con lo HORNEADO, no con DATA: guardaNueva() ya empuja la
+         fila a DATA antes de escribir aquí, y comparar con DATA borraba el
+         puente nada más crearlo (15 oct 2026). */
+      if(!HORNEADAS.has(d.id)){ if(!DATA.some(r=>r.id===d.id)) DATA.push(row); return; }
       /* Ya esta horneada en DATA: la tarea diaria la recogio de
          `ofertas`/`tailor` y este puente sobra. Se borra en vez de dejarlo
          crecer, que es lo unico que hacia: un documento mas por oferta manual,
@@ -973,14 +979,18 @@ async function guardaNueva(){
   }
   if(db){
     try{
-      await db.doc('manual/'+id).set(row);
-      await db.doc('ofertas/'+id).set({
+      const oferta = {
         id, empresa, puesto, ubicacion, modalidad, publicada, idioma, fuente:'Manual',
         sal_min: salMin, sal_max: salMax, sal_origen: salOrigen, sal_base: salBase,
         url_apply: url || '', ambito, anios_min: aniosMin,
         reqs, surfaced: surfacedArr,
-      });
-      await db.doc('tailor/'+id).set({ familia, titular, resumen, skills_extra: skillsExtra });
+      };
+      const tailor = { familia, titular, resumen, skills_extra: skillsExtra };
+      /* `manual/<id>` lleva oferta y tailor además de la fila: es lo que
+         preparar_datos.py mete en `data/` aunque el snapshot sea anterior. */
+      await db.doc('manual/'+id).set({ row, oferta, tailor });
+      await db.doc('ofertas/'+id).set(oferta);
+      await db.doc('tailor/'+id).set(tailor);
     }catch(e){
       toast('Guardada en esta vista, pero no se ha podido escribir en la base de datos compartida.');
     }

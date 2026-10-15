@@ -36,6 +36,13 @@ python pipeline/dashboard.py          # -> out/dashboard.html
 python pipeline/exportar_snapshot.py  # -> out/snapshot.json, para mañana
 ```
 
+**Republicar a mano (desde un chat)** es el mismo camino: volcar
+`pipeline/snapshot` (+ `snapshot_1`… si `partes` > 1) **y `manual/`** al mismo
+directorio, y si `preparar_datos.py` imprime `[manual]`, subir también
+`out/snapshot*.json` a `pipeline/snapshot*` después de publicar. Si no, la
+página borra `manual/<id>` al verla publicada y la oferta, que no está en el
+snapshot, se pierde en la republicación siguiente.
+
 `RADAR_DATA` cambia el directorio de datos (por defecto `data`).
 
 ## Requisitos

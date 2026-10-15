@@ -167,7 +167,9 @@ def _suma_manuales(volcado, ofertas, tailor):
             continue
         ofertas.append(o); tailor[o["id"]] = t; ids.add(o["id"]); n += 1
     if n:
-        print(f"[manual] {n} ofertas añadidas a mano desde el último snapshot")
+        print(f"[manual] {n} ofertas añadidas a mano desde el último snapshot. "
+              "OBLIGATORIO al acabar: exportar_snapshot.py y subir out/snapshot*.json "
+              "a pipeline/snapshot*, o se perderán en la próxima republicación.")
 
 
 def _avisa_duplicados(ofertas):

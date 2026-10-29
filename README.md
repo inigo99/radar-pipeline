@@ -1,5 +1,11 @@
 # radar-pipeline
 
+> **¿Looking for the tool?** Is **[jobradar](https://github.com/inigo99/jobradar)**
+> ([`pip install jobradar-cv`](https://pypi.org/project/jobradar-cv/)): the general
+> version, with tests and doc, for any job.
+> This repo is my personal search engine (the upgrades are ported to jobradar).
+> Is run by a daily task, and this README are their engineering notes.
+
 > **¿Buscas la herramienta?** Es **[jobradar](https://github.com/inigo99/jobradar)**
 > ([`pip install jobradar-cv`](https://pypi.org/project/jobradar-cv/)): la versión
 > general, documentada y con tests, para cualquier profesión.
